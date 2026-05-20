@@ -405,22 +405,24 @@ async function printViaNetwork(record, shop, settings, paperWidth) {
 }
 
 // ── Browser fallback ───────────────────────────────────────────────────────
-// Uses main-window print (not iframe) so Android Chrome / Sunmi Chrome
-// doesn't navigate to about:blank. A hidden <div> is injected into the page;
-// @media print CSS hides the POS UI and shows only the receipt, then the div
-// is removed after the dialog closes.
+// Uses visibility:hidden on html/body and visibility:visible on the receipt
+// div — more reliable than display:none on Android Chrome, which can snapshot
+// the page before display changes take effect and bleed POS UI into the print.
 function printViaBrowser(htmlContent) {
   return new Promise((resolve) => {
-    const STYLE_ID = '__ps_print_style__'
-    const ROOT_ID  = '__ps_print_root__'
+    const ROOT_ID = '__ps_print_root__'
 
     const style = document.createElement('style')
-    style.id = STYLE_ID
     style.textContent = `
       @media print {
-        body > *:not(#${ROOT_ID}) { display: none !important; }
-        #${ROOT_ID} { display: block !important; font-family: 'Courier New', monospace; font-size: 12px; padding: 8px; }
-        #${ROOT_ID} hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+        html, body { visibility: hidden !important; }
+        #${ROOT_ID}, #${ROOT_ID} * { visibility: visible !important; }
+        #${ROOT_ID} {
+          position: fixed; top: 0; left: 0; width: 100%;
+          font-family: 'Courier New', monospace; font-size: 12px;
+          padding: 8px; box-sizing: border-box;
+        }
+        #${ROOT_ID} hr  { border: none; border-top: 1px dashed #000; margin: 4px 0; }
         #${ROOT_ID} .center { text-align: center; }
         #${ROOT_ID} .right  { text-align: right; }
         #${ROOT_ID} .bold   { font-weight: bold; }
@@ -459,7 +461,8 @@ function printViaBrowser(htmlContent) {
       img.onerror = once
       setTimeout(once, 1200)
     } else {
-      setTimeout(trigger, 300)
+      // 500ms gives Android Chrome time to apply the print styles before snapshot
+      setTimeout(trigger, 500)
     }
   })
 }
