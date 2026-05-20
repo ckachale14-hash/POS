@@ -414,9 +414,10 @@ async function printViaNetwork(record, shop, settings, paperWidth) {
 }
 
 // ── Browser fallback ───────────────────────────────────────────────────────
-// Opens a new window containing ONLY the receipt HTML and prints from there.
-// This is the only reliable cross-browser approach — no amount of @media print
-// CSS can guarantee the main POS page is hidden on all Android Chrome builds.
+// Opens a Blob URL in a new tab. The receipt HTML includes an inline script
+// that calls window.print() on itself — this guarantees Android Chrome prints
+// the receipt tab, not the main POS window (w.print() from the parent does
+// not reliably target the child window on Android Chrome).
 function printViaBrowser(htmlContent) {
   return new Promise((resolve) => {
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -431,9 +432,8 @@ function printViaBrowser(htmlContent) {
       .space-y-1 > * + * { margin-top: 4px; }
       .space-y-0\\.5 > * + * { margin-top: 2px; }
       .text-gray-500, .text-gray-400 { color: #666; }
-      .text-red-600 { color: #dc2626; }
+      .text-red-600  { color: #dc2626; }
       .text-amber-600 { color: #d97706; }
-      .justify-between { justify-content: space-between; }
       .leading-tight { line-height: 1.2; }
       img.logo { max-width: 80px; max-height: 60px; object-fit: contain; display: block; }
       .mx-auto { margin-left: auto; margin-right: auto; }
@@ -444,30 +444,35 @@ function printViaBrowser(htmlContent) {
       .border-t { border-top: 1px solid #d1d5db; }
       @media print { @page { margin: 4mm; size: 58mm auto; } }
     </style>
-    </head><body>${htmlContent}</body></html>`
+    </head>
+    <body>
+      ${htmlContent}
+      <script>
+        window.addEventListener('load', function () {
+          var img = document.querySelector('img');
+          function doPrint() {
+            window.print();
+            setTimeout(function () { window.close(); }, 1000);
+          }
+          if (img && !img.complete) {
+            var done = false;
+            function once() { if (!done) { done = true; doPrint(); } }
+            img.onload = once; img.onerror = once;
+            setTimeout(once, 1200);
+          } else {
+            setTimeout(doPrint, 300);
+          }
+        });
+      <\/script>
+    </body></html>`
 
-    const w = window.open('', '_blank')
-    if (!w) { resolve(); return }   // popup blocked — give up gracefully
+    const blob = new Blob([html], { type: 'text/html' })
+    const url  = URL.createObjectURL(blob)
+    const w    = window.open(url, '_blank')
 
-    w.document.open()
-    w.document.write(html)
-    w.document.close()
-
-    const cleanup = () => { try { w.close() } catch {} resolve() }
-
-    const trigger = () => { w.focus(); w.print(); setTimeout(cleanup, 1500) }
-
-    // Wait for logo image if present, then print
-    const img = w.document.querySelector('img')
-    if (img && !img.complete) {
-      let fired = false
-      const once = () => { if (!fired) { fired = true; trigger() } }
-      img.onload = once
-      img.onerror = once
-      setTimeout(once, 1200)
-    } else {
-      setTimeout(trigger, 300)
-    }
+    // Resolve and clean up after the tab has had time to print and close
+    setTimeout(() => { URL.revokeObjectURL(url); resolve() }, 6000)
+    if (!w) { URL.revokeObjectURL(url); resolve() }  // popup blocked
   })
 }
 
