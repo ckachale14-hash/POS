@@ -391,42 +391,53 @@ async function printViaNetwork(record, shop, settings, paperWidth) {
 }
 
 // ── Browser fallback ───────────────────────────────────────────────────────
-// On desktop: triggers the system print dialog via a hidden iframe (works fine).
-// On Android Chrome / Sunmi Chrome: window.print() inside an iframe opens
-// the "Save as PDF / Scan for printers" dialog — this IS the correct browser
-// behaviour on Android. There is no way to bypass it from a web page.
-// If you want to skip the dialog entirely on Sunmi, use the Sunmi Built-in
-// printer type and open the app in the Sunmi's built-in browser (not Chrome).
-function printViaBrowser(htmlContent, title) {
+// Uses main-window print (not iframe) so Android Chrome / Sunmi Chrome
+// doesn't navigate to about:blank. A hidden <div> is injected into the page;
+// @media print CSS hides the POS UI and shows only the receipt, then the div
+// is removed after the dialog closes.
+function printViaBrowser(htmlContent) {
   return new Promise((resolve) => {
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:400px;height:700px;border:none;visibility:hidden'
-    document.body.appendChild(iframe)
+    const STYLE_ID = '__ps_print_style__'
+    const ROOT_ID  = '__ps_print_root__'
 
-    const html = buildBrowserHtml(htmlContent, title)
-    iframe.contentDocument.open()
-    iframe.contentDocument.write(html)
-    iframe.contentDocument.close()
+    const style = document.createElement('style')
+    style.id = STYLE_ID
+    style.textContent = `
+      @media print {
+        body > *:not(#${ROOT_ID}) { display: none !important; }
+        #${ROOT_ID} { display: block !important; font-family: 'Courier New', monospace; font-size: 12px; padding: 8px; }
+        #${ROOT_ID} hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
+        #${ROOT_ID} .center { text-align: center; }
+        #${ROOT_ID} .right  { text-align: right; }
+        #${ROOT_ID} .bold   { font-weight: bold; }
+        #${ROOT_ID} .flex   { display: flex; justify-content: space-between; }
+        #${ROOT_ID} img.logo { max-width: 80px; max-height: 60px; object-fit: contain; }
+        @page { margin: 4mm; size: 58mm auto; }
+      }
+      #${ROOT_ID} { display: none; }
+    `
+
+    const container = document.createElement('div')
+    container.id = ROOT_ID
+    container.innerHTML = htmlContent
+
+    document.head.appendChild(style)
+    document.body.appendChild(container)
 
     const cleanup = () => {
-      setTimeout(() => {
-        if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
-        resolve()
-      }, 1500)
+      if (style.parentNode) style.parentNode.removeChild(style)
+      if (container.parentNode) container.parentNode.removeChild(container)
+      resolve()
     }
 
     const trigger = () => {
-      try {
-        iframe.contentWindow.focus()
-        iframe.contentWindow.print()
-      } catch (e) {
-        console.warn('iframe print failed:', e)
-      }
-      cleanup()
+      window.focus()
+      window.print()
+      setTimeout(cleanup, 1500)
     }
 
     // Wait for logo image if present, then print
-    const img = iframe.contentDocument.querySelector('img')
+    const img = container.querySelector('img')
     if (img && !img.complete) {
       let fired = false
       const once = () => { if (!fired) { fired = true; trigger() } }
@@ -437,24 +448,6 @@ function printViaBrowser(htmlContent, title) {
       setTimeout(trigger, 300)
     }
   })
-}
-
-function buildBrowserHtml(content, title) {
-  return `
-    <html><head><title>${title}</title>
-    <style>
-      body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 8px; }
-      hr { border: none; border-top: 1px dashed #000; margin: 4px 0; }
-      .center { text-align: center; } .right { text-align: right; }
-      .bold { font-weight: bold; } .flex { display: flex; justify-content: space-between; }
-      img.logo { max-width: 80px; max-height: 60px; object-fit: contain; }
-      @media print {
-        body { margin: 0; }
-        @page { margin: 4mm; size: 58mm auto; }
-      }
-    </style></head>
-    <body>${content}</body></html>
-  `
 }
 
 // ── Main entry point ───────────────────────────────────────────────────────
@@ -469,7 +462,6 @@ function buildBrowserHtml(content, title) {
 export async function printReceipt(record, shop, settings, htmlContent) {
   const printerType = await getSetting('printer_type', 'browser')
   const paperWidth  = await getSetting('paper_width', '58mm')
-  const title = `Receipt — ${record.ref || record.id}`
 
   // ── 1. Sunmi inner printer ───────────────────────────────────────────────
   if (printerType === 'sunmi') {
@@ -516,6 +508,6 @@ export async function printReceipt(record, shop, settings, htmlContent) {
   }
 
   // ── 4. Browser (default) ──────────────────────────────────────────────────
-  await printViaBrowser(htmlContent, title)
+  await printViaBrowser(htmlContent)
   return { ok: true, method: 'browser' }
 }
