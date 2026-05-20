@@ -360,15 +360,24 @@ async function printViaBluetooth(record, shop, settings, paperWidth) {
 // ── RawBT local print bridge (Android app) ────────────────────────────────
 // RawBT runs a local HTTP server on the device (port 7584).
 // Install from Google Play, open it, enable HTTP API, select the built-in printer.
+//
+// IMPORTANT: The app is served over HTTPS (Vercel), so we CANNOT use
+// Content-Type: application/octet-stream — that triggers a CORS preflight
+// OPTIONS request which RawBT doesn't handle, causing Chrome to block the
+// request before it's ever sent. Fix: send a no-cors simple request using
+// a text/plain Blob. RawBT reads the raw bytes regardless of content-type.
 async function printViaRawBT(record, shop, settings, paperWidth) {
   const data = buildEscPos(record, shop, settings, paperWidth)
-  const res = await fetch('http://127.0.0.1:7584/rawbt', {
+  // Wrap in a text/plain Blob — simple content-type = no preflight needed.
+  const blob = new Blob([data], { type: 'text/plain' })
+  await fetch('http://127.0.0.1:7584/rawbt', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: data,
-    signal: AbortSignal.timeout(5000),
+    mode: 'no-cors',   // bypasses CORS; response is opaque but data is sent
+    body: blob,
+    signal: AbortSignal.timeout(3000),
   })
-  if (!res.ok) throw new Error(`RawBT returned HTTP ${res.status}`)
+  // With no-cors the response is always opaque (status 0), but a network-level
+  // error (connection refused = RawBT not running) still rejects the promise.
 }
 
 // ── Network/USB print via raw TCP socket proxy or fetch ────────────────────
@@ -405,55 +414,51 @@ async function printViaNetwork(record, shop, settings, paperWidth) {
 }
 
 // ── Browser fallback ───────────────────────────────────────────────────────
-// Uses visibility:hidden on html/body and visibility:visible on the receipt
-// div — more reliable than display:none on Android Chrome, which can snapshot
-// the page before display changes take effect and bleed POS UI into the print.
+// Opens a new window containing ONLY the receipt HTML and prints from there.
+// This is the only reliable cross-browser approach — no amount of @media print
+// CSS can guarantee the main POS page is hidden on all Android Chrome builds.
 function printViaBrowser(htmlContent) {
   return new Promise((resolve) => {
-    const ROOT_ID = '__ps_print_root__'
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Courier New', monospace; font-size: 12px; padding: 8px; }
+      hr, .divider { border: none; border-top: 1px dashed #000; margin: 4px 0; display: block; }
+      .center { text-align: center; }
+      .right  { text-align: right; }
+      .bold   { font-weight: bold; }
+      .flex   { display: flex; justify-content: space-between; }
+      .space-y-1 > * + * { margin-top: 4px; }
+      .space-y-0\\.5 > * + * { margin-top: 2px; }
+      .text-gray-500, .text-gray-400 { color: #666; }
+      .text-red-600 { color: #dc2626; }
+      .text-amber-600 { color: #d97706; }
+      .justify-between { justify-content: space-between; }
+      .leading-tight { line-height: 1.2; }
+      img.logo { max-width: 80px; max-height: 60px; object-fit: contain; display: block; }
+      .mx-auto { margin-left: auto; margin-right: auto; }
+      .mb-3 { margin-bottom: 8px; }
+      .mb-1 { margin-bottom: 4px; }
+      .mb-2 { margin-bottom: 6px; }
+      .pt-1 { padding-top: 4px; }
+      .border-t { border-top: 1px solid #d1d5db; }
+      @media print { @page { margin: 4mm; size: 58mm auto; } }
+    </style>
+    </head><body>${htmlContent}</body></html>`
 
-    const style = document.createElement('style')
-    style.textContent = `
-      @media print {
-        html, body { visibility: hidden !important; }
-        #${ROOT_ID}, #${ROOT_ID} * { visibility: visible !important; }
-        #${ROOT_ID} {
-          position: fixed; top: 0; left: 0; width: 100%;
-          font-family: 'Courier New', monospace; font-size: 12px;
-          padding: 8px; box-sizing: border-box;
-        }
-        #${ROOT_ID} hr  { border: none; border-top: 1px dashed #000; margin: 4px 0; }
-        #${ROOT_ID} .center { text-align: center; }
-        #${ROOT_ID} .right  { text-align: right; }
-        #${ROOT_ID} .bold   { font-weight: bold; }
-        #${ROOT_ID} .flex   { display: flex; justify-content: space-between; }
-        #${ROOT_ID} img.logo { max-width: 80px; max-height: 60px; object-fit: contain; }
-        @page { margin: 4mm; size: 58mm auto; }
-      }
-      #${ROOT_ID} { display: none; }
-    `
+    const w = window.open('', '_blank')
+    if (!w) { resolve(); return }   // popup blocked — give up gracefully
 
-    const container = document.createElement('div')
-    container.id = ROOT_ID
-    container.innerHTML = htmlContent
+    w.document.open()
+    w.document.write(html)
+    w.document.close()
 
-    document.head.appendChild(style)
-    document.body.appendChild(container)
+    const cleanup = () => { try { w.close() } catch {} resolve() }
 
-    const cleanup = () => {
-      if (style.parentNode) style.parentNode.removeChild(style)
-      if (container.parentNode) container.parentNode.removeChild(container)
-      resolve()
-    }
-
-    const trigger = () => {
-      window.focus()
-      window.print()
-      setTimeout(cleanup, 1500)
-    }
+    const trigger = () => { w.focus(); w.print(); setTimeout(cleanup, 1500) }
 
     // Wait for logo image if present, then print
-    const img = container.querySelector('img')
+    const img = w.document.querySelector('img')
     if (img && !img.complete) {
       let fired = false
       const once = () => { if (!fired) { fired = true; trigger() } }
@@ -461,8 +466,7 @@ function printViaBrowser(htmlContent) {
       img.onerror = once
       setTimeout(once, 1200)
     } else {
-      // 500ms gives Android Chrome time to apply the print styles before snapshot
-      setTimeout(trigger, 500)
+      setTimeout(trigger, 300)
     }
   })
 }
