@@ -357,6 +357,20 @@ async function printViaBluetooth(record, shop, settings, paperWidth) {
   await device.gatt.disconnect()
 }
 
+// ── RawBT local print bridge (Android app) ────────────────────────────────
+// RawBT runs a local HTTP server on the device (port 7584).
+// Install from Google Play, open it, enable HTTP API, select the built-in printer.
+async function printViaRawBT(record, shop, settings, paperWidth) {
+  const data = buildEscPos(record, shop, settings, paperWidth)
+  const res = await fetch('http://127.0.0.1:7584/rawbt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: data,
+    signal: AbortSignal.timeout(5000),
+  })
+  if (!res.ok) throw new Error(`RawBT returned HTTP ${res.status}`)
+}
+
 // ── Network/USB print via raw TCP socket proxy or fetch ────────────────────
 async function printViaNetwork(record, shop, settings, paperWidth) {
   const printerIp = await getSetting('network_printer_ip', '')
@@ -465,7 +479,7 @@ export async function printReceipt(record, shop, settings, htmlContent) {
 
   // ── 1. Sunmi inner printer ───────────────────────────────────────────────
   if (printerType === 'sunmi') {
-    // JSAPI only works inside Sunmi's built-in WebView browser, not Chrome.
+    // JSAPI only works inside a native WebView, not Chrome.
     if (hasSunmiJSAPI()) {
       try {
         await printViaSunmiJSAPI(record, shop, settings)
@@ -474,14 +488,14 @@ export async function printReceipt(record, shop, settings, htmlContent) {
         throw new Error(`Sunmi printer error: ${e.message}`)
       }
     }
-    // No JSAPI = app is open in Chrome, not the Sunmi browser.
-    throw new Error(
-      'Sunmi inner printer not available.\n\n' +
-      'The built-in printer only works when the app is opened in the ' +
-      'Sunmi device\'s built-in browser (not Chrome).\n\n' +
-      'Fix: On the Sunmi, open the app URL in "Browser" (the Sunmi built-in app), ' +
-      'not in Chrome. Or switch to Bluetooth printer mode in Settings.'
-    )
+    // No JSAPI (Chrome on Sunmi) — try RawBT print bridge, then browser fallback.
+    try {
+      await printViaRawBT(record, shop, settings, paperWidth)
+      return { ok: true, method: 'rawbt' }
+    } catch {
+      await printViaBrowser(htmlContent)
+      return { ok: true, method: 'browser' }
+    }
   }
 
   // ── 2. Bluetooth ─────────────────────────────────────────────────────────

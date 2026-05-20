@@ -519,7 +519,7 @@ function PrinterTab({ showToast }) {
     {
       id: 'sunmi',
       name: 'Sunmi Built-in',
-      desc: 'Inner printer on this Sunmi device (V1s/V2/T2)',
+      desc: 'Inner thermal printer — uses RawBT bridge when running in Chrome',
     },
     {
       id: 'bluetooth',
@@ -589,20 +589,22 @@ function PrinterTab({ showToast }) {
               </div>
             </div>
           ) : (
-            <div className="p-3 bg-red-50 rounded-xl border border-red-200 mb-3 flex items-start gap-2">
-              <span className="text-red-500 text-base leading-none mt-0.5">✕</span>
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 mb-3 flex items-start gap-2">
+              <span className="text-amber-500 text-base leading-none mt-0.5">⚠</span>
               <div>
-                <p className="text-xs font-bold text-red-800">Sunmi printer NOT detected</p>
-                <p className="text-[10px] text-red-700 leading-relaxed">
-                  You are using <strong>Chrome</strong> on the Sunmi device. Chrome cannot access the built-in printer —
-                  only the Sunmi's own browser app can.
+                <p className="text-xs font-bold text-amber-800">Using Chrome — install RawBT for direct printing</p>
+                <p className="text-[10px] text-amber-700 leading-relaxed">
+                  Chrome cannot access the Sunmi built-in printer directly. Install <strong>RawBT</strong> (free, Google Play)
+                  to enable direct thermal printing from Chrome.
                 </p>
-                <p className="text-[10px] text-red-700 leading-relaxed mt-1">
-                  <strong>Fix:</strong> On the Sunmi, open the <strong>Browser</strong> app (not Chrome) and navigate to
-                  this app's URL. Then printing will work automatically.
-                </p>
-                <p className="text-[10px] text-red-700 leading-relaxed mt-1">
-                  Or switch to <strong>Bluetooth</strong> printer mode below — that works in any browser.
+                <ol className="text-[10px] text-amber-700 space-y-0.5 list-decimal list-inside leading-relaxed mt-1.5">
+                  <li>Install <strong>RawBT</strong> from Google Play on this Sunmi</li>
+                  <li>Open RawBT → Settings → enable <strong>HTTP API</strong></li>
+                  <li>In RawBT, select the <strong>built-in printer</strong></li>
+                  <li>Come back here and print — it will work automatically</li>
+                </ol>
+                <p className="text-[10px] text-amber-700 leading-relaxed mt-1.5">
+                  Without RawBT, printing will fall back to the Chrome print dialog.
                 </p>
               </div>
             </div>
