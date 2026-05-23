@@ -521,13 +521,22 @@ export async function printReceipt(record, shop, settings, htmlContent) {
         throw new Error(`Sunmi printer error: ${e.message}`)
       }
     }
-    // No JSAPI (Chrome on Sunmi) — use Android intent to send receipt
-    // directly to RawBT, bypassing the browser print dialog entirely.
-    if (/android/i.test(navigator.userAgent)) {
+    // No JSAPI (Chrome on Sunmi).
+    // 1. Try RawBT HTTP API (works with RawBT Premium — enable in RawBT → Settings → API).
+    //    Sends raw ESC/POS bytes directly to the thermal printer, no dialog.
+    try {
+      await printViaRawBT(record, shop, settings, paperWidth)
+      return { ok: true, method: 'rawbt-http' }
+    } catch {
+      // HTTP API not available or not enabled — try Android intent next.
+    }
+    // 2. Android intent — hands receipt HTML to RawBT without a browser dialog.
+    //    Works on any Android device regardless of user-agent string.
+    if (typeof window !== 'undefined' && /android/i.test(navigator.userAgent || '')) {
       printViaRawBTIntent(htmlContent)
       return { ok: true, method: 'rawbt-intent' }
     }
-    // Non-Android (desktop dev/testing) — fall back to browser print.
+    // 3. Non-Android (desktop dev/testing) — browser print fallback.
     await printViaBrowser(htmlContent)
     return { ok: true, method: 'browser' }
   }
