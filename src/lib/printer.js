@@ -447,16 +447,32 @@ function buildReceiptHtml(htmlContent) {
 // ── RawBT via Android Web Share API ───────────────────────────────────────
 // Shares an ESC/POS .bin file to RawBT via Android's native share sheet.
 // RawBT receives the raw bytes and prints directly to the thermal printer.
-// Note: skips canShare() check — it returns false on some Android Chrome
-// builds even when file sharing works fine. We just try directly.
+//
+// Chrome's Web Share API has an allowlist of shareable MIME types.
+// application/octet-stream is blocked on some Android Chrome versions;
+// text/plain is always permitted. We try both — RawBT reads raw bytes
+// regardless of the declared MIME type.
 async function printViaAndroidShare(record, shop, settings, paperWidth) {
   if (!navigator.share) throw new Error('Web Share API not available')
 
   const data = buildEscPos(record, shop, settings, paperWidth)
-  const blob = new Blob([data], { type: 'application/octet-stream' })
-  const file = new File([blob], 'receipt.bin', { type: 'application/octet-stream' })
 
-  await navigator.share({ files: [file], title: 'Receipt' })
+  // Try each MIME type in order until one succeeds.
+  const mimeTypes = ['application/octet-stream', 'text/plain']
+  let lastError
+  for (const mimeType of mimeTypes) {
+    const blob = new Blob([data], { type: mimeType })
+    const file = new File([blob], 'receipt.bin', { type: mimeType })
+    try {
+      await navigator.share({ files: [file], title: 'Receipt' })
+      return // success — stop trying
+    } catch (e) {
+      if (e.name === 'AbortError') throw e // user cancelled — stop immediately
+      lastError = e  // failed — try next MIME type
+    }
+  }
+  // All types failed — re-throw with original error details for diagnosis
+  throw lastError
 }
 
 // ── Browser fallback (non-Android / desktop) ──────────────────────────────
@@ -540,7 +556,7 @@ export async function printReceipt(record, shop, settings, htmlContent) {
         // printViaBrowser triggers Chrome's print dialog; if RawBT is the remembered
         // print service Chrome gets stuck on "Preparing preview" indefinitely.
         throw new Error(
-          'Could not share receipt to RawBT. Make sure RawBT is installed and open, then try again.'
+          `Share failed (${e.name}: ${e.message}). Make sure RawBT is installed and open, then try again.`
         )
       }
     }
