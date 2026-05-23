@@ -598,11 +598,16 @@ export async function printReceipt(record, shop, settings, htmlContent) {
     const inWebView  = isAndroid && !hasShare
 
     // ── Path A: RawBT "Open URL" WebView ─────────────────────────────────
-    // rawbt:// URL scheme attempts caused a hanging system popup that blocked
-    // the HTML blob from opening — worse than no attempt at all.
-    // For now, go straight to the HTML blob which reliably opens and prints.
-    // Native ESC/POS printing will be handled properly in the Capacitor APK.
+    // "Server for RawBT" companion app exposes an HTTP API at localhost:7584.
+    // In RawBT's own WebView (not Chrome), HTTPS→HTTP localhost is not blocked
+    // by Private Network Access, so this fetch can reach the local server.
+    // Select RAW Mode in Server for RawBT and keep it running as a service.
     if (inWebView) {
+      try {
+        await printViaRawBT(record, shop, settings, paperWidth)
+        return { ok: true, method: 'rawbt-http' }
+      } catch { /* Server for RawBT not running — fall through to HTML blob */ }
+
       await printViaBrowser(htmlContent)
       return { ok: true, method: 'browser-webview' }
     }
