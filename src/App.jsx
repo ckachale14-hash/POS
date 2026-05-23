@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   shop_website:                  '',
   discount_threshold:            5,
   low_stock_threshold:           5,
+  rawbt_server_address:          '127.0.0.1:9100',
   auto_convert_stock:            true,
   margin_formula:                'gross',
   float_cart_pages:              ['pos','dashboard','inventory','sales','customers','changeCredit','sync','settings'],

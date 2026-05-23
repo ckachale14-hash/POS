@@ -454,12 +454,13 @@ function TaxTab({ showToast }) {
 
 // ── Printer ────────────────────────────────────────────────────────────────
 function PrinterTab({ showToast }) {
-  const [printerType, setPrinterType] = useState('browser')
-  const [paperWidth, setPaperWidth]   = useState('58mm')
-  const [savedPrinters, setSavedPrinters] = useState([])
-  const [scanning, setScanning]       = useState(false)
-  const [networkIp, setNetworkIp]     = useState('')
-  const [networkPort, setNetworkPort] = useState('9100')
+  const [printerType, setPrinterType]           = useState('browser')
+  const [paperWidth, setPaperWidth]             = useState('58mm')
+  const [savedPrinters, setSavedPrinters]       = useState([])
+  const [scanning, setScanning]                 = useState(false)
+  const [networkIp, setNetworkIp]               = useState('')
+  const [networkPort, setNetworkPort]           = useState('9100')
+  const [rawbtAddress, setRawbtAddress]         = useState('127.0.0.1:9100')
 
   useEffect(() => {
     getSetting('printer_type', 'browser').then(setPrinterType)
@@ -467,6 +468,7 @@ function PrinterTab({ showToast }) {
     getSetting('saved_printers', []).then(p => setSavedPrinters(p || []))
     getSetting('network_printer_ip', '').then(setNetworkIp)
     getSetting('network_printer_port', '9100').then(setNetworkPort)
+    getSetting('rawbt_server_address', '127.0.0.1:9100').then(setRawbtAddress)
   }, [])
 
   const save = async () => {
@@ -474,6 +476,7 @@ function PrinterTab({ showToast }) {
     await setSetting('paper_width', paperWidth)
     await setSetting('network_printer_ip', networkIp)
     await setSetting('network_printer_port', networkPort)
+    await setSetting('rawbt_server_address', rawbtAddress)
     showToast('Printer settings saved')
   }
 
@@ -633,7 +636,25 @@ function PrinterTab({ showToast }) {
               </div>
             </div>
           )}
-          <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+          {/* Server for RawBT address */}
+          <div className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+            <p className="text-xs font-bold text-gray-800 mb-1 flex items-center gap-1.5">
+              <Wifi size={13} className="text-gray-500" />
+              Server for RawBT — Address
+            </p>
+            <p className="text-[10px] text-gray-500 mb-2">
+              Open the <strong>Server for RawBT</strong> app — it shows the current IP:port (e.g. 192.168.1.x:9100).
+              Paste it here. Set <strong>Data share type → RAW Mode</strong> and keep the service running.
+            </p>
+            <input
+              value={rawbtAddress}
+              onChange={e => setRawbtAddress(e.target.value)}
+              className="input text-sm font-mono"
+              placeholder="192.168.x.x:9100"
+            />
+          </div>
+
+          <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 mt-3">
             <p className="text-xs font-bold text-blue-800 mb-1">Connecting phones to print via this Sunmi</p>
             <ol className="text-[10px] text-blue-700 space-y-1 list-decimal list-inside leading-relaxed">
               <li>On the Sunmi: Settings → Printer → select <strong>Sunmi Built-in</strong>, open in Sunmi Browser</li>

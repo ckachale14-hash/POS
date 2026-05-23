@@ -369,10 +369,12 @@ async function printViaBluetooth(record, shop, settings, paperWidth) {
 async function printViaRawBT(record, shop, settings, paperWidth) {
   const data = buildEscPos(record, shop, settings, paperWidth)
   // Wrap in a text/plain Blob — simple content-type = no preflight needed.
-  // Server for RawBT listens on port 9100 (standard raw print port).
-  // Try root path first (raw TCP convention), then /rawbt as fallback.
+  // Address is configured in Settings → Printer → Server for RawBT Address.
+  // Defaults to 127.0.0.1:9100 but must match the IP shown in the Server for
+  // RawBT app (the device's WiFi IP, e.g. 192.168.x.x:9100).
+  const address = await getSetting('rawbt_server_address', '127.0.0.1:9100')
   const blob = new Blob([data], { type: 'application/octet-stream' })
-  await fetch('http://127.0.0.1:9100', {
+  await fetch(`http://${address}`, {
     method: 'POST',
     mode: 'no-cors',
     body: blob,
