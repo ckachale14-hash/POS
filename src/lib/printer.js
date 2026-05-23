@@ -445,21 +445,20 @@ function buildReceiptHtml(htmlContent) {
 }
 
 // ── RawBT Android intent ───────────────────────────────────────────────────
-// Bypasses the browser print dialog entirely. Navigating to an intent:// URL
-// hands control to Android, which launches RawBT directly with the receipt
-// HTML as a base64 extra. No HTTP API, no CORS, works 100% offline.
-// Note: free RawBT adds a small "Printed by RawBT (Unlicensed)" watermark.
-function printViaRawBTIntent(htmlContent) {
-  const html = buildReceiptHtml(htmlContent)
+// Uses the rawbt:// URI scheme to send raw ESC/POS bytes directly to RawBT.
+// Chrome on Android passes rawbt:// links to the RawBT app automatically.
+// Sending ESC/POS (not HTML) avoids RawBT's HTML renderer and prints faster
+// with no watermark regardless of free/premium.
+function printViaRawBTIntent(record, shop, settings, paperWidth) {
+  const data = buildEscPos(record, shop, settings, paperWidth)
 
-  // UTF-8 safe base64 — handles currency symbols and special characters
-  const bytes = new TextEncoder().encode(html)
+  // Base64-encode the raw ESC/POS bytes
   let binary = ''
-  bytes.forEach(b => { binary += String.fromCharCode(b) })
+  data.forEach(b => { binary += String.fromCharCode(b) })
   const base64 = btoa(binary)
 
-  window.location.href =
-    `intent:#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.base64=${base64};end`
+  // rawbt://print?raw=BASE64 is RawBT's URI scheme for raw byte printing
+  window.location.href = `rawbt://print?raw=${encodeURIComponent(base64)}`
 }
 
 // ── Browser fallback (non-Android / desktop) ──────────────────────────────
@@ -530,10 +529,10 @@ export async function printReceipt(record, shop, settings, htmlContent) {
     } catch {
       // HTTP API not available or not enabled — try Android intent next.
     }
-    // 2. Android intent — hands receipt HTML to RawBT without a browser dialog.
+    // 2. Android intent — sends raw ESC/POS bytes to RawBT via rawbt:// URI scheme.
     //    Works on any Android device regardless of user-agent string.
     if (typeof window !== 'undefined' && /android/i.test(navigator.userAgent || '')) {
-      printViaRawBTIntent(htmlContent)
+      printViaRawBTIntent(record, shop, settings, paperWidth)
       return { ok: true, method: 'rawbt-intent' }
     }
     // 3. Non-Android (desktop dev/testing) — browser print fallback.
