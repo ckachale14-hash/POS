@@ -589,22 +589,46 @@ function PrinterTab({ showToast }) {
               </div>
             </div>
           ) : (
-            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 mb-3 flex items-start gap-2">
-              <span className="text-amber-500 text-base leading-none mt-0.5">⚠</span>
-              <div>
-                <p className="text-xs font-bold text-amber-800">Using Chrome — install RawBT for direct printing</p>
-                <p className="text-[10px] text-amber-700 leading-relaxed">
-                  Chrome cannot access the Sunmi built-in printer directly. Install <strong>RawBT</strong> (free, Google Play)
-                  to enable direct thermal printing from Chrome.
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 mb-3">
+              <div className="flex items-start gap-2 mb-2">
+                <span className="text-amber-500 text-base leading-none mt-0.5">⚠</span>
+                <p className="text-xs font-bold text-amber-800">Chrome detected — RawBT needed for direct printing</p>
+              </div>
+              <p className="text-[10px] text-amber-700 leading-relaxed mb-2">
+                The Sunmi JSAPI only works in RawBT's built-in browser, not Chrome. Use one of these methods:
+              </p>
+
+              {/* Method A */}
+              <div className="bg-white rounded-lg border border-amber-200 p-2 mb-2">
+                <p className="text-[10px] font-bold text-amber-900 mb-1">⭐ Method A (Recommended) — Open POS inside RawBT</p>
+                <p className="text-[10px] text-amber-700 leading-relaxed mb-1">
+                  RawBT has a built-in browser. Open the POS inside it so printing goes straight to the thermal printer — no share sheet needed.
                 </p>
-                <ol className="text-[10px] text-amber-700 space-y-0.5 list-decimal list-inside leading-relaxed mt-1.5">
-                  <li>Install <strong>RawBT</strong> from Google Play on this Sunmi</li>
-                  <li>Open RawBT → Settings → enable <strong>HTTP API</strong></li>
-                  <li>In RawBT, select the <strong>built-in printer</strong></li>
-                  <li>Come back here and print — it will work automatically</li>
+                <ol className="text-[10px] text-amber-700 space-y-0.5 list-decimal list-inside leading-relaxed">
+                  <li>Open <strong>RawBT</strong> on this Sunmi</li>
+                  <li>On the home screen tap <strong>"Open URL"</strong></li>
+                  <li>Enter: <code className="bg-amber-100 px-0.5 rounded">https://portionspot-v11-5.vercel.app</code></li>
+                  <li>The POS opens inside RawBT — bookmark it for next time</li>
+                  <li>Make sure RawBT has the <strong>Sunmi built-in printer</strong> selected</li>
+                  <li>Tap Print in the POS — receipt prints directly, no dialogs</li>
                 </ol>
-                <p className="text-[10px] text-amber-700 leading-relaxed mt-1.5">
-                  Without RawBT, printing will fall back to the Chrome print dialog.
+              </div>
+
+              {/* Method B */}
+              <div className="bg-white rounded-lg border border-amber-200 p-2">
+                <p className="text-[10px] font-bold text-amber-900 mb-1">Method B — Chrome + RawBT Web Share</p>
+                <p className="text-[10px] text-amber-700 leading-relaxed mb-1">
+                  Keep using Chrome. When you tap Print, Android's share sheet appears — pick RawBT to send the receipt to the printer.
+                </p>
+                <ol className="text-[10px] text-amber-700 space-y-0.5 list-decimal list-inside leading-relaxed">
+                  <li>Install <strong>RawBT</strong> from Google Play (free or Premium)</li>
+                  <li>Open RawBT and select the <strong>Sunmi built-in printer (DRIVER_AIDL_WOYOU_JIUIV5)</strong></li>
+                  <li>Keep RawBT <strong>open in the background</strong> while using the POS</li>
+                  <li>Tap Print in the POS — a <strong>share sheet</strong> will appear</li>
+                  <li>Select <strong>RawBT</strong> from the share sheet</li>
+                </ol>
+                <p className="text-[10px] text-amber-700 mt-1 italic">
+                  If the share fails, make sure RawBT is open, then tap Print again.
                 </p>
               </div>
             </div>
