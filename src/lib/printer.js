@@ -413,17 +413,14 @@ async function printViaNetwork(record, shop, settings, paperWidth) {
   }
 }
 
-// ── Browser fallback ───────────────────────────────────────────────────────
-// Opens a Blob URL in a new tab. The receipt HTML includes an inline script
-// that calls window.print() on itself — this guarantees Android Chrome prints
-// the receipt tab, not the main POS window (w.print() from the parent does
-// not reliably target the child window on Android Chrome).
-function printViaBrowser(htmlContent) {
-  return new Promise((resolve) => {
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+// ── Shared receipt HTML builder ────────────────────────────────────────────
+// Used by both the RawBT intent path and the browser fallback path so the
+// receipt always looks the same regardless of how it reaches the printer.
+function buildReceiptHtml(htmlContent) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: 'Courier New', monospace; font-size: 12px; padding: 8px; }
+      body { font-family: 'Courier New', monospace; font-size: 12px; padding: 8px; width: 58mm; }
       hr, .divider { border: none; border-top: 1px dashed #000; margin: 4px 0; display: block; }
       .center { text-align: center; }
       .right  { text-align: right; }
@@ -444,10 +441,35 @@ function printViaBrowser(htmlContent) {
       .border-t { border-top: 1px solid #d1d5db; }
       @media print { @page { margin: 4mm; size: 58mm auto; } }
     </style>
-    </head>
-    <body>
-      ${htmlContent}
-      <script>
+    </head><body>${htmlContent}</body></html>`
+}
+
+// ── RawBT Android intent ───────────────────────────────────────────────────
+// Bypasses the browser print dialog entirely. Navigating to an intent:// URL
+// hands control to Android, which launches RawBT directly with the receipt
+// HTML as a base64 extra. No HTTP API, no CORS, works 100% offline.
+// Note: free RawBT adds a small "Printed by RawBT (Unlicensed)" watermark.
+function printViaRawBTIntent(htmlContent) {
+  const html = buildReceiptHtml(htmlContent)
+
+  // UTF-8 safe base64 — handles currency symbols and special characters
+  const bytes = new TextEncoder().encode(html)
+  let binary = ''
+  bytes.forEach(b => { binary += String.fromCharCode(b) })
+  const base64 = btoa(binary)
+
+  window.location.href =
+    `intent:#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;S.base64=${base64};end`
+}
+
+// ── Browser fallback (non-Android / desktop) ──────────────────────────────
+// Opens a Blob URL in a new tab. The receipt tab calls window.print() on
+// itself so Android Chrome prints that tab's content, not the POS window.
+function printViaBrowser(htmlContent) {
+  return new Promise((resolve) => {
+    const html = buildReceiptHtml(htmlContent).replace(
+      '</body>',
+      `<script>
         window.addEventListener('load', function () {
           var img = document.querySelector('img');
           function doPrint() {
@@ -463,14 +485,13 @@ function printViaBrowser(htmlContent) {
             setTimeout(doPrint, 300);
           }
         });
-      <\/script>
-    </body></html>`
+      <\/script></body>`
+    )
 
     const blob = new Blob([html], { type: 'text/html' })
     const url  = URL.createObjectURL(blob)
     const w    = window.open(url, '_blank')
 
-    // Resolve and clean up after the tab has had time to print and close
     setTimeout(() => { URL.revokeObjectURL(url); resolve() }, 6000)
     if (!w) { URL.revokeObjectURL(url); resolve() }  // popup blocked
   })
@@ -500,14 +521,15 @@ export async function printReceipt(record, shop, settings, htmlContent) {
         throw new Error(`Sunmi printer error: ${e.message}`)
       }
     }
-    // No JSAPI (Chrome on Sunmi) — try RawBT print bridge, then browser fallback.
-    try {
-      await printViaRawBT(record, shop, settings, paperWidth)
-      return { ok: true, method: 'rawbt' }
-    } catch {
-      await printViaBrowser(htmlContent)
-      return { ok: true, method: 'browser' }
+    // No JSAPI (Chrome on Sunmi) — use Android intent to send receipt
+    // directly to RawBT, bypassing the browser print dialog entirely.
+    if (/android/i.test(navigator.userAgent)) {
+      printViaRawBTIntent(htmlContent)
+      return { ok: true, method: 'rawbt-intent' }
     }
+    // Non-Android (desktop dev/testing) — fall back to browser print.
+    await printViaBrowser(htmlContent)
+    return { ok: true, method: 'browser' }
   }
 
   // ── 2. Bluetooth ─────────────────────────────────────────────────────────
