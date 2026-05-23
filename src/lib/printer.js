@@ -490,6 +490,32 @@ async function printViaAndroidShare(record, shop, settings, paperWidth) {
   throw lastError
 }
 
+// ── ESC/POS file download — RawBT "Open URL" browser path ────────────────
+// Triggers a .prn file download containing raw ESC/POS bytes.
+// When the POS is opened inside RawBT's built-in browser (via "Open URL"),
+// RawBT intercepts the download in its WebView and sends the bytes straight
+// to the thermal printer at native resolution — no HTML rendering, no
+// Android print framework scaling, perfect text quality.
+// Works entirely offline; no server needed (uses a data: URI).
+function printViaEscPosFile(record, shop, settings, paperWidth) {
+  return new Promise((resolve, reject) => {
+    try {
+      const data = buildEscPos(record, shop, settings, paperWidth)
+      // Convert Uint8Array → binary string → base64 (data: URLs bypass HTTPS restrictions)
+      let binary = ''
+      for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i])
+      const b64  = btoa(binary)
+      const a    = document.createElement('a')
+      a.href     = 'data:application/octet-stream;base64,' + b64
+      a.download = 'receipt.prn'
+      a.style.display = 'none'
+      document.body.appendChild(a)
+      a.click()
+      setTimeout(() => { try { document.body.removeChild(a) } catch {} ; resolve() }, 1500)
+    } catch (e) { reject(e) }
+  })
+}
+
 // ── Browser fallback (non-Android / desktop) ──────────────────────────────
 // Opens a Blob URL in a new tab. The receipt tab calls window.print() on
 // itself so Android Chrome prints that tab's content, not the POS window.
@@ -549,38 +575,51 @@ export async function printReceipt(record, shop, settings, htmlContent) {
         throw new Error(`Sunmi printer error: ${e.message}`)
       }
     }
-    // No JSAPI (Chrome on Sunmi). Try Web Share FIRST — navigator.share() requires
-    // user activation which expires after a few seconds. The RawBT HTTP fetch used to
-    // run before this and could consume up to 3 s, causing NotAllowedError on share().
-    //
-    // 1. Android Web Share — shares ESC/POS .bin to RawBT via the Android share sheet.
-    if (typeof navigator !== 'undefined' && navigator.share) {
+    // No JSAPI — determine context so we use the right path.
+    const isAndroid  = /android/i.test(navigator.userAgent)
+    const hasShare   = typeof navigator !== 'undefined' && !!navigator.share
+    // navigator.share is absent in RawBT's WebView (it's not Chrome).
+    // navigator.share is present in Android Chrome.
+    const inWebView  = isAndroid && !hasShare
+
+    // ── Path A: RawBT "Open URL" WebView ─────────────────────────────────
+    // Send raw ESC/POS bytes as a .prn file download. RawBT intercepts the
+    // download inside its own WebView and prints at native thermal resolution.
+    // This bypasses Android's print framework entirely — no A4 scaling,
+    // no HTML rasterisation, perfect crisp text output.
+    if (inWebView) {
+      try {
+        await printViaEscPosFile(record, shop, settings, paperWidth)
+        return { ok: true, method: 'escpos-file' }
+      } catch { /* fall through to HTTP */ }
+    }
+
+    // ── Path B: Android Chrome — Web Share (needs fresh user activation) ──
+    if (hasShare) {
       try {
         await printViaAndroidShare(record, shop, settings, paperWidth)
         return { ok: true, method: 'android-share' }
       } catch (e) {
         if (e.name === 'AbortError') return { ok: false, method: 'android-share', error: 'Cancelled' }
-        // Share failed — try RawBT HTTP API next (doesn't need user activation)
+        // Share failed — try HTTP next
       }
     }
-    // 2. RawBT HTTP API (RawBT Premium — enable in RawBT → Settings → HTTP API).
-    //    Sends raw ESC/POS bytes directly; no dialog, fully silent.
+
+    // ── Path C: RawBT HTTP API (Premium — enable in RawBT → Settings) ────
     try {
       await printViaRawBT(record, shop, settings, paperWidth)
       return { ok: true, method: 'rawbt-http' }
-    } catch {
-      // HTTP API not available or not enabled.
-    }
-    // 3. On Android both paths failed — do NOT fall through to printViaBrowser.
-    //    That opens Chrome's print dialog which gets stuck "Preparing preview"
-    //    when RawBT is selected as the Android print service.
-    if (typeof navigator !== 'undefined' && navigator.share) {
+    } catch { /* not enabled */ }
+
+    // ── Path D: Android but nothing worked ───────────────────────────────
+    if (isAndroid) {
       throw new Error(
-        'Could not print. Open RawBT first and keep it running, then tap Print. ' +
-        'Or open the POS via "Open URL" inside RawBT for direct printing (see Settings → Printer).'
+        'Could not print. If using Chrome: open RawBT first, then tap Print. ' +
+        'For best results, open the POS via "Open URL" inside RawBT (Settings → Printer).'
       )
     }
-    // 4. Desktop / dev fallback only (navigator.share not available = not Android Chrome).
+
+    // ── Path E: Desktop / dev — browser print fallback ───────────────────
     await printViaBrowser(htmlContent)
     return { ok: true, method: 'browser' }
   }
