@@ -598,13 +598,11 @@ export async function printReceipt(record, shop, settings, htmlContent) {
     const inWebView  = isAndroid && !hasShare
 
     // ── Path A: RawBT "Open URL" WebView ─────────────────────────────────
-    // Try the rawbt:// URL scheme first — RawBT's WebView may intercept it
-    // via shouldOverrideUrlLoading() and print the ESC/POS bytes natively
-    // (no A4 scaling, perfect thermal output). We can't detect success from
-    // JS, so we ALWAYS fall through to the HTML blob so something prints.
+    // rawbt:// URL scheme attempts caused a hanging system popup that blocked
+    // the HTML blob from opening — worse than no attempt at all.
+    // For now, go straight to the HTML blob which reliably opens and prints.
+    // Native ESC/POS printing will be handled properly in the Capacitor APK.
     if (inWebView) {
-      await tryRawBtScheme(record, shop, settings, paperWidth)
-      // Always open the HTML blob as a guaranteed visible fallback.
       await printViaBrowser(htmlContent)
       return { ok: true, method: 'browser-webview' }
     }
