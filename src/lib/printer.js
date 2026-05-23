@@ -446,16 +446,15 @@ function buildReceiptHtml(htmlContent) {
 
 // ── RawBT via Android Web Share API ───────────────────────────────────────
 // Shares an ESC/POS .bin file to RawBT via Android's native share sheet.
-// RawBT receives the file, reads the raw bytes, and prints directly to the
-// thermal printer — no URI format guessing, no base64 misinterpretation.
-// After the first share, Android remembers RawBT for receipt.bin files.
+// RawBT receives the raw bytes and prints directly to the thermal printer.
+// Note: skips canShare() check — it returns false on some Android Chrome
+// builds even when file sharing works fine. We just try directly.
 async function printViaAndroidShare(record, shop, settings, paperWidth) {
+  if (!navigator.share) throw new Error('Web Share API not available')
+
   const data = buildEscPos(record, shop, settings, paperWidth)
   const blob = new Blob([data], { type: 'application/octet-stream' })
   const file = new File([blob], 'receipt.bin', { type: 'application/octet-stream' })
-
-  if (!navigator.share) throw new Error('Web Share API not available')
-  if (!navigator.canShare?.({ files: [file] })) throw new Error('File sharing not supported')
 
   await navigator.share({ files: [file], title: 'Receipt' })
 }
@@ -535,12 +534,18 @@ export async function printReceipt(record, shop, settings, htmlContent) {
         await printViaAndroidShare(record, shop, settings, paperWidth)
         return { ok: true, method: 'android-share' }
       } catch (e) {
-        // User cancelled share sheet, or file sharing not supported
+        // User cancelled the share sheet
         if (e.name === 'AbortError') return { ok: false, method: 'android-share', error: 'Cancelled' }
-        // Fall through to browser print
+        // Any other failure on Android: do NOT fall through to printViaBrowser.
+        // printViaBrowser triggers Chrome's print dialog; if RawBT is the remembered
+        // print service Chrome gets stuck on "Preparing preview" indefinitely.
+        throw new Error(
+          'Could not share receipt to RawBT. Make sure RawBT is installed and open, then try again.'
+        )
       }
     }
     // 3. Non-Android / desktop dev testing — browser print fallback.
+    //    Only reached when navigator.share is unavailable (desktop Chrome/Firefox).
     await printViaBrowser(htmlContent)
     return { ok: true, method: 'browser' }
   }
