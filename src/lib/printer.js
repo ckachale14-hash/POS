@@ -444,21 +444,20 @@ function buildReceiptHtml(htmlContent) {
     </head><body>${htmlContent}</body></html>`
 }
 
-// ── RawBT Android intent ───────────────────────────────────────────────────
-// Uses the rawbt:// URI scheme to send raw ESC/POS bytes directly to RawBT.
-// Chrome on Android passes rawbt:// links to the RawBT app automatically.
-// Sending ESC/POS (not HTML) avoids RawBT's HTML renderer and prints faster
-// with no watermark regardless of free/premium.
-function printViaRawBTIntent(record, shop, settings, paperWidth) {
+// ── RawBT via Android Web Share API ───────────────────────────────────────
+// Shares an ESC/POS .bin file to RawBT via Android's native share sheet.
+// RawBT receives the file, reads the raw bytes, and prints directly to the
+// thermal printer — no URI format guessing, no base64 misinterpretation.
+// After the first share, Android remembers RawBT for receipt.bin files.
+async function printViaAndroidShare(record, shop, settings, paperWidth) {
   const data = buildEscPos(record, shop, settings, paperWidth)
+  const blob = new Blob([data], { type: 'application/octet-stream' })
+  const file = new File([blob], 'receipt.bin', { type: 'application/octet-stream' })
 
-  // Base64-encode the raw ESC/POS bytes
-  let binary = ''
-  data.forEach(b => { binary += String.fromCharCode(b) })
-  const base64 = btoa(binary)
+  if (!navigator.share) throw new Error('Web Share API not available')
+  if (!navigator.canShare?.({ files: [file] })) throw new Error('File sharing not supported')
 
-  // rawbt://print?raw=BASE64 is RawBT's URI scheme for raw byte printing
-  window.location.href = `rawbt://print?raw=${encodeURIComponent(base64)}`
+  await navigator.share({ files: [file], title: 'Receipt' })
 }
 
 // ── Browser fallback (non-Android / desktop) ──────────────────────────────
@@ -529,13 +528,19 @@ export async function printReceipt(record, shop, settings, htmlContent) {
     } catch {
       // HTTP API not available or not enabled — try Android intent next.
     }
-    // 2. Android intent — sends raw ESC/POS bytes to RawBT via rawbt:// URI scheme.
-    //    Works on any Android device regardless of user-agent string.
-    if (typeof window !== 'undefined' && /android/i.test(navigator.userAgent || '')) {
-      printViaRawBTIntent(record, shop, settings, paperWidth)
-      return { ok: true, method: 'rawbt-intent' }
+    // 2. Android Web Share — shares an ESC/POS .bin file to RawBT via the
+    //    Android share sheet. Works on any Android regardless of user-agent.
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try {
+        await printViaAndroidShare(record, shop, settings, paperWidth)
+        return { ok: true, method: 'android-share' }
+      } catch (e) {
+        // User cancelled share sheet, or file sharing not supported
+        if (e.name === 'AbortError') return { ok: false, method: 'android-share', error: 'Cancelled' }
+        // Fall through to browser print
+      }
     }
-    // 3. Non-Android (desktop dev/testing) — browser print fallback.
+    // 3. Non-Android / desktop dev testing — browser print fallback.
     await printViaBrowser(htmlContent)
     return { ok: true, method: 'browser' }
   }
