@@ -148,6 +148,9 @@ export default function Inventory({ user }) {
       active: 1,
     }
 
+    // Set updatedAt so pushProducts() in sync.js sees this as changed
+    payload.updatedAt = new Date().toISOString()
+
     if (id) { await db.products.update(id, payload); showToast('Product updated', 'success') }
     else    { await db.products.add(payload); showToast('Product added', 'success') }
 
@@ -183,7 +186,8 @@ export default function Inventory({ user }) {
       stockUnits = converted.stockUnits
     }
 
-    await db.products.update(p.id, { stockBoxes, stockUnits })
+    // Set updatedAt so pushProducts() in sync.js includes this adjustment
+    await db.products.update(p.id, { stockBoxes, stockUnits, updatedAt: new Date().toISOString() })
     await db.stockMovements.add({
       productId: p.id,
       type: adjDelta === 'add' ? 'adjustment-in' : 'adjustment-out',

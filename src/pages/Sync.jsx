@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-  RefreshCw, CheckCircle2, XCircle, Clock, Wifi, WifiOff,
+  RefreshCw, CheckCircle2, XCircle, Clock, Wifi, WifiOff, Download,
   Database, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Zap,
   Activity, Users, Package, ReceiptText, Shield
 } from 'lucide-react'
 import { db, getSetting, setSetting } from '../lib/db'
-import { runSync, testConnection, resetClient, checkStockReconciliation } from '../lib/sync'
+import { runSync, forcePullAll, testConnection, resetClient, checkStockReconciliation } from '../lib/sync'
 import { fmt } from '../lib/utils'
 
 const SQL_SCHEMA = `-- PortionSpot Motors POS — Supabase Schema
@@ -169,6 +169,21 @@ export default function Sync({ user, online }) {
     await loadStats()
   }
 
+  const [forcePulling, setForcePulling] = useState(false)
+  const handleForcePull = async () => {
+    if (!online || !sbUrl) return
+    setForcePulling(true)
+    setSyncLog([])
+    const result = await forcePullAll((msg) => setSyncLog(prev => [...prev, msg]))
+    if (result.errors?.length) {
+      setSyncLog(prev => [...prev, ...result.errors.map(e => `! ${e}`)])
+    }
+    setLastSync(new Date().toISOString())
+    setForcePulling(false)
+    setAutoSyncStatus(result.ok ? 'ok' : 'error')
+    await loadStats()
+  }
+
   const copySchema = () => {
     navigator.clipboard.writeText(SQL_SCHEMA).then(() => {
       setSchemaCopied(true)
@@ -238,14 +253,35 @@ export default function Sync({ user, online }) {
 
             <button
               onClick={handleSync}
-              disabled={syncing || !online || !sbUrl}
+              disabled={syncing || forcePulling || !online || !sbUrl}
               className="btn-primary"
-              style={{ width: '100%', padding: '11px', fontSize: 13, justifyContent: 'center', opacity: (syncing || !online || !sbUrl) ? 0.45 : 1 }}
+              style={{ width: '100%', padding: '11px', fontSize: 13, justifyContent: 'center', opacity: (syncing || forcePulling || !online || !sbUrl) ? 0.45 : 1 }}
             >
               {syncing
                 ? <><RefreshCw size={14} style={{ animation: 'spin 0.8s linear infinite' }} />Syncing…</>
                 : <><Zap size={14} />Sync Now</>}
             </button>
+
+            {/* Force Pull — pulls all cloud records regardless of timestamps */}
+            <button
+              onClick={handleForcePull}
+              disabled={syncing || forcePulling || !online || !sbUrl}
+              style={{
+                width: '100%', marginTop: 8, padding: '10px', fontSize: 12,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                borderRadius: 12, border: '1.5px solid rgba(59,130,246,0.3)',
+                background: 'rgba(59,130,246,0.06)', color: '#2563eb',
+                fontWeight: 700, cursor: (syncing || forcePulling || !online || !sbUrl) ? 'not-allowed' : 'pointer',
+                opacity: (syncing || forcePulling || !online || !sbUrl) ? 0.45 : 1,
+              }}
+            >
+              {forcePulling
+                ? <><RefreshCw size={13} style={{ animation: 'spin 0.8s linear infinite' }} />Pulling from cloud…</>
+                : <><Download size={13} />Pull All from Cloud</>}
+            </button>
+            <p style={{ fontSize: 9, color: 'var(--ink-tertiary)', textAlign: 'center', marginTop: 5 }}>
+              Use this after editing products or stock directly in Supabase dashboard
+            </p>
 
             {!online && (
               <p style={{ fontSize: 10, color: '#d97706', textAlign: 'center', marginTop: 8, fontWeight: 600 }}>Device is offline — connect to sync</p>

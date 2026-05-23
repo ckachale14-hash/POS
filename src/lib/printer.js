@@ -417,29 +417,44 @@ async function printViaNetwork(record, shop, settings, paperWidth) {
 // Used by both the RawBT intent path and the browser fallback path so the
 // receipt always looks the same regardless of how it reaches the printer.
 function buildReceiptHtml(htmlContent) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+  // viewport width=220 ≈ 58 mm at 96 ppi (58 × 96 / 25.4 = 219 px).
+  // This makes body { width: 100% } fill exactly the paper width so the receipt
+  // is NOT a narrow column when RawBT's WebView renders the blob page.
+  return `<!DOCTYPE html><html><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=220, initial-scale=1.0">
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { font-family: 'Courier New', monospace; font-size: 12px; padding: 8px; width: 58mm; }
-      hr, .divider { border: none; border-top: 1px dashed #000; margin: 4px 0; display: block; }
+      body {
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.35;
+        padding: 4px 6px;
+        width: 100%;
+        max-width: 100%;
+      }
+      hr, .divider { border: none; border-top: 1px dashed #000; margin: 3px 0; display: block; }
       .center { text-align: center; }
       .right  { text-align: right; }
       .bold   { font-weight: bold; }
       .flex   { display: flex; justify-content: space-between; }
       .space-y-1 > * + * { margin-top: 4px; }
       .space-y-0\\.5 > * + * { margin-top: 2px; }
-      .text-gray-500, .text-gray-400 { color: #666; }
+      .text-gray-500, .text-gray-400 { color: #555; }
       .text-red-600  { color: #dc2626; }
       .text-amber-600 { color: #d97706; }
       .leading-tight { line-height: 1.2; }
-      img.logo { max-width: 80px; max-height: 60px; object-fit: contain; display: block; }
+      img.logo { max-width: 60px; max-height: 48px; object-fit: contain; display: block; }
       .mx-auto { margin-left: auto; margin-right: auto; }
-      .mb-3 { margin-bottom: 8px; }
-      .mb-1 { margin-bottom: 4px; }
-      .mb-2 { margin-bottom: 6px; }
-      .pt-1 { padding-top: 4px; }
+      .mb-3 { margin-bottom: 6px; }
+      .mb-1 { margin-bottom: 3px; }
+      .mb-2 { margin-bottom: 5px; }
+      .pt-1 { padding-top: 3px; }
       .border-t { border-top: 1px solid #d1d5db; }
-      @media print { @page { margin: 4mm; size: 58mm auto; } }
+      @media print {
+        @page { size: 58mm auto; margin: 0; }
+        body  { padding: 1mm 2mm; font-size: 8pt; }
+      }
     </style>
     </head><body>${htmlContent}</body></html>`
 }

@@ -60,6 +60,15 @@ function Loader() {
   )
 }
 
+// ── Session storage keys ──────────────────────────────────────────────────
+// localStorage  keeps the user across refreshes (same tab or new tab).
+// sessionStorage 'pos_session_alive' is set on login and cleared when the
+// browser/WebView is fully closed (RawBT closed = new WebView session).
+// On load: both must be present to auto-restore login.
+// On logout or close: sessionStorage is gone → login screen on next open.
+const STORAGE_USER    = 'pos_user'
+const STORAGE_SESSION = 'pos_session_alive'
+
 export default function App() {
   const [ready, setReady]           = useState(false)
   const [user, setUser]             = useState(null)
@@ -70,6 +79,17 @@ export default function App() {
   useEffect(() => {
     ;(async () => {
       await seedIfEmpty(INITIAL_INVENTORY, INITIAL_USERS, DEFAULT_SETTINGS)
+
+      // Restore session: only if the current WebView/browser session is still
+      // alive (sessionStorage flag) AND a saved user exists in localStorage.
+      try {
+        const alive   = sessionStorage.getItem(STORAGE_SESSION)
+        const saved   = localStorage.getItem(STORAGE_USER)
+        if (alive && saved) {
+          const restored = JSON.parse(saved)
+          if (restored?.id) setUser(restored)
+        }
+      } catch {}
 
       // Show setup wizard on first launch
       const setupDone = await getSetting('setup_complete', false)
@@ -96,7 +116,25 @@ export default function App() {
   if (!ready) return <Loader />
 
   const navigate = (p) => setPage(p)
-  const handleLogout = () => { setUser(null); setPage('pos') }
+
+  // Save user to localStorage + mark session alive so login persists across
+  // page refreshes, but is cleared when RawBT (WebView) is fully closed.
+  const handleLogin = (u) => {
+    try {
+      localStorage.setItem(STORAGE_USER, JSON.stringify(u))
+      sessionStorage.setItem(STORAGE_SESSION, '1')
+    } catch {}
+    setUser(u)
+  }
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem(STORAGE_USER)
+      sessionStorage.removeItem(STORAGE_SESSION)
+    } catch {}
+    setUser(null)
+    setPage('pos')
+  }
   const handleWizardComplete = () => {
     setShowWizard(false)
     // Refresh to pick up new data
@@ -111,7 +149,7 @@ export default function App() {
       )}
 
       {!user ? (
-        <Login onLogin={setUser} online={online} />
+        <Login onLogin={handleLogin} online={online} />
       ) : (
         <SessionProvider>
           <AppShell user={user} online={online} page={page} navigate={navigate} onLogout={handleLogout}>

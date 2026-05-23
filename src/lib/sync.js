@@ -228,6 +228,68 @@ export async function checkStockReconciliation(sb) {
   } catch { return [] }
 }
 
+// ── Force-pull: pull ALL records regardless of last-sync timestamp ────────
+// Use this when you've edited data directly in Supabase dashboard and want
+// those changes pulled down immediately without waiting for timestamps.
+export async function forcePullAll(log) {
+  const sb = await getSupabaseClient()
+  if (!sb) return { ok: false, errors: ['No Supabase connection configured'] }
+
+  const errors = []
+  let pulled = 0
+
+  // Products — full overwrite of every row
+  try {
+    log && log('Force-pulling products…')
+    const { data, error } = await sb.from('products').select('*')
+    if (error) throw new Error(error.message)
+    for (const row of (data || [])) {
+      const existing = await db.products.where('sku').equals(row.sku).first()
+      const mapped = {
+        sku: row.sku, name: row.name, category: row.category,
+        boxPrice: row.box_price, boxSize: row.box_size,
+        wholesalePrice: row.wholesale_price, retailPrice: row.retail_price,
+        costPrice: row.cost_price, stockBoxes: row.stock_boxes,
+        stockUnits: row.stock_units, lowStockThreshold: row.low_stock_threshold,
+        active: row.active ? 1 : 0,
+        syncedAt: new Date().toISOString(), updatedAt: row.updated_at,
+      }
+      if (existing) await db.products.update(existing.id, mapped)
+      else          await db.products.add(mapped)
+    }
+    await setSetting('last_pull_products', new Date().toISOString())
+    pulled += data?.length || 0
+    log && log(`↓ Force-pulled ${data?.length || 0} product(s)`)
+  } catch (e) { errors.push('products: ' + e.message); log && log('⚠ ' + e.message) }
+
+  // Customers — full overwrite
+  try {
+    log && log('Force-pulling customers…')
+    const { data, error } = await sb.from('customers').select('*')
+    if (error) throw new Error(error.message)
+    for (const row of (data || [])) {
+      const existing = row.local_id ? await db.customers.where('localId').equals(row.local_id).first() : null
+      const mapped = {
+        localId: row.local_id, name: row.name, phone: row.phone || '',
+        email: row.email || '', address: row.address || '',
+        creditLimit: row.credit_limit, balance: row.balance,
+        isTradeAccount: row.is_trade_account, notes: row.notes || '',
+        syncedAt: new Date().toISOString(),
+      }
+      if (existing) await db.customers.update(existing.id, mapped)
+      else          await db.customers.add(mapped)
+    }
+    await setSetting('last_pull_customers', new Date().toISOString())
+    pulled += data?.length || 0
+    log && log(`↓ Force-pulled ${data?.length || 0} customer(s)`)
+  } catch (e) { errors.push('customers: ' + e.message); log && log('⚠ ' + e.message) }
+
+  const now = new Date().toISOString()
+  await setSetting('last_sync', now)
+  log && log(`✓ Force pull complete — ${pulled} records updated`)
+  return { ok: errors.length === 0, errors, pulled }
+}
+
 // ── Main sync runner ───────────────────────────────────────────────────────
 export async function runSync(log) {
   const sb = await getSupabaseClient()
