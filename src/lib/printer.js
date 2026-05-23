@@ -369,12 +369,14 @@ async function printViaBluetooth(record, shop, settings, paperWidth) {
 async function printViaRawBT(record, shop, settings, paperWidth) {
   const data = buildEscPos(record, shop, settings, paperWidth)
   // Wrap in a text/plain Blob — simple content-type = no preflight needed.
-  const blob = new Blob([data], { type: 'text/plain' })
-  await fetch('http://127.0.0.1:7584/rawbt', {
+  // Server for RawBT listens on port 9100 (standard raw print port).
+  // Try root path first (raw TCP convention), then /rawbt as fallback.
+  const blob = new Blob([data], { type: 'application/octet-stream' })
+  await fetch('http://127.0.0.1:9100', {
     method: 'POST',
-    mode: 'no-cors',   // bypasses CORS; response is opaque but data is sent
+    mode: 'no-cors',
     body: blob,
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(5000),
   })
   // With no-cors the response is always opaque (status 0), but a network-level
   // error (connection refused = RawBT not running) still rejects the promise.
