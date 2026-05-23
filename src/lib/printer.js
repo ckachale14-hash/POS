@@ -490,29 +490,30 @@ async function printViaAndroidShare(record, shop, settings, paperWidth) {
   throw lastError
 }
 
-// ── ESC/POS file download — RawBT "Open URL" browser path ────────────────
-// Triggers a .prn file download containing raw ESC/POS bytes.
-// When the POS is opened inside RawBT's built-in browser (via "Open URL"),
-// RawBT intercepts the download in its WebView and sends the bytes straight
-// to the thermal printer at native resolution — no HTML rendering, no
-// Android print framework scaling, perfect text quality.
-// Works entirely offline; no server needed (uses a data: URI).
-function printViaEscPosFile(record, shop, settings, paperWidth) {
-  return new Promise((resolve, reject) => {
+// ── rawbt:// URL scheme via hidden iframe ─────────────────────────────────
+// Fires a rawbt:// navigation inside a 1×1 invisible iframe.
+// In RawBT's own WebView, shouldOverrideUrlLoading() intercepts the scheme,
+// handles the print request internally, and the main page is NOT navigated
+// away. Completely silent from the JS side — we can't confirm success, so
+// we always fall through to the HTML blob to guarantee something prints.
+function tryRawBtScheme(record, shop, settings, paperWidth) {
+  return new Promise((resolve) => {
     try {
       const data = buildEscPos(record, shop, settings, paperWidth)
-      // Convert Uint8Array → binary string → base64 (data: URLs bypass HTTPS restrictions)
       let binary = ''
       for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i])
-      const b64  = btoa(binary)
-      const a    = document.createElement('a')
-      a.href     = 'data:application/octet-stream;base64,' + b64
-      a.download = 'receipt.prn'
-      a.style.display = 'none'
-      document.body.appendChild(a)
-      a.click()
-      setTimeout(() => { try { document.body.removeChild(a) } catch {} ; resolve() }, 1500)
-    } catch (e) { reject(e) }
+      const b64 = btoa(binary)
+
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0;width:1px;height:1px;border:none'
+      document.body.appendChild(iframe)
+      // Try the most likely rawbt:// URL formats used by RawBT's WebView handler
+      iframe.src = `rawbt://v1/print?base64=${encodeURIComponent(b64)}`
+      setTimeout(() => {
+        try { document.body.removeChild(iframe) } catch {}
+        resolve()
+      }, 600)
+    } catch { resolve() }
   })
 }
 
@@ -583,15 +584,15 @@ export async function printReceipt(record, shop, settings, htmlContent) {
     const inWebView  = isAndroid && !hasShare
 
     // ── Path A: RawBT "Open URL" WebView ─────────────────────────────────
-    // Send raw ESC/POS bytes as a .prn file download. RawBT intercepts the
-    // download inside its own WebView and prints at native thermal resolution.
-    // This bypasses Android's print framework entirely — no A4 scaling,
-    // no HTML rasterisation, perfect crisp text output.
+    // Try the rawbt:// URL scheme first — RawBT's WebView may intercept it
+    // via shouldOverrideUrlLoading() and print the ESC/POS bytes natively
+    // (no A4 scaling, perfect thermal output). We can't detect success from
+    // JS, so we ALWAYS fall through to the HTML blob so something prints.
     if (inWebView) {
-      try {
-        await printViaEscPosFile(record, shop, settings, paperWidth)
-        return { ok: true, method: 'escpos-file' }
-      } catch { /* fall through to HTTP */ }
+      await tryRawBtScheme(record, shop, settings, paperWidth)
+      // Always open the HTML blob as a guaranteed visible fallback.
+      await printViaBrowser(htmlContent)
+      return { ok: true, method: 'browser-webview' }
     }
 
     // ── Path B: Android Chrome — Web Share (needs fresh user activation) ──
