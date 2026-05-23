@@ -491,24 +491,38 @@ async function printViaAndroidShare(record, shop, settings, paperWidth) {
 }
 
 // ── rawbt:// URL scheme via hidden iframe ─────────────────────────────────
-// Fires a rawbt:// navigation inside a 1×1 invisible iframe.
-// In RawBT's own WebView, shouldOverrideUrlLoading() intercepts the scheme,
-// handles the print request internally, and the main page is NOT navigated
-// away. Completely silent from the JS side — we can't confirm success, so
-// we always fall through to the HTML blob to guarantee something prints.
+// RawBT's WebView intercepts rawbt:// navigations via shouldOverrideUrlLoading.
+// The "Getting data and preparing a print job" popup means RawBT IS intercepting
+// the URL but expects a real HTTPS URL it can fetch — not inline base64 bytes.
+//
+// Flow:
+//   1. Build ESC/POS bytes → encode to URL-safe base64
+//   2. Pass that as the ?d= param to our /api/print Vercel endpoint
+//   3. Tell RawBT to fetch that URL: rawbt://v1/print?url=<endpoint>
+//   4. RawBT fetches the endpoint → gets raw ESC/POS bytes → prints natively
+//      (no A4 scaling, no HTML rendering — perfect thermal output)
+//
+// We can't confirm success from JS, so we always fall through to the HTML blob.
 function tryRawBtScheme(record, shop, settings, paperWidth) {
   return new Promise((resolve) => {
     try {
       const data = buildEscPos(record, shop, settings, paperWidth)
+
+      // URL-safe base64: replace + → -, / → _, strip = padding.
+      // These chars are safe in query strings without encodeURIComponent.
       let binary = ''
       for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i])
-      const b64 = btoa(binary)
+      const b64url = btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+
+      // /api/print is a Vercel serverless function that returns the ESC/POS bytes.
+      // Use window.location.origin so it works on any deployment URL.
+      const printUrl = `${window.location.origin}/api/print?d=${b64url}`
 
       const iframe = document.createElement('iframe')
       iframe.style.cssText = 'position:fixed;opacity:0;pointer-events:none;top:0;left:0;width:1px;height:1px;border:none'
       document.body.appendChild(iframe)
-      // Try the most likely rawbt:// URL formats used by RawBT's WebView handler
-      iframe.src = `rawbt://v1/print?base64=${encodeURIComponent(b64)}`
+      // rawbt://v1/print?url=<url> — RawBT fetches the URL and prints the bytes
+      iframe.src = `rawbt://v1/print?url=${encodeURIComponent(printUrl)}`
       setTimeout(() => {
         try { document.body.removeChild(iframe) } catch {}
         resolve()
