@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   Store, User, Percent, Printer, AlertTriangle, Image, ReceiptText,
   ShoppingCart, TrendingUp, Plus, Edit2, Trash2, Save, X, Eye, EyeOff,
-  Bluetooth, BluetoothSearching, CheckCircle2, Upload, Wifi
+  Bluetooth, BluetoothSearching, CheckCircle2, Upload, Wifi, Lock, ScrollText, Shield
 } from 'lucide-react'
 import { db, getSetting, setSetting, saveSetting, getAllUsers, logAudit } from '../lib/db'
 import { useSession } from '../context/SessionContext'
@@ -33,6 +33,8 @@ export default function Settings({ user }) {
     { id: 'printer',  label: 'Printer',  icon: Printer },
     { id: 'cart',     label: 'Cart HUD', icon: ShoppingCart },
     { id: 'margins',  label: 'Margins',  icon: TrendingUp },
+    { id: 'security', label: 'Security', icon: Lock },
+    { id: 'audit',    label: 'Audit',    icon: ScrollText },
     { id: 'danger',   label: 'Reset',    icon: AlertTriangle },
   ]
 
@@ -67,8 +69,10 @@ export default function Settings({ user }) {
         {tab === 'tax'     && <TaxTab showToast={showToast} />}
         {tab === 'printer' && <PrinterTab showToast={showToast} />}
         {tab === 'cart'    && <CartHUDTab showToast={showToast} />}
-        {tab === 'margins' && <MarginsTab showToast={showToast} />}
-        {tab === 'danger'  && <DangerTab showToast={showToast} />}
+        {tab === 'margins'  && <MarginsTab showToast={showToast} />}
+        {tab === 'security' && <SecurityTab showToast={showToast} />}
+        {tab === 'audit'    && <AuditTab />}
+        {tab === 'danger'   && <DangerTab showToast={showToast} />}
       </div>
 
       {toast && (
@@ -907,6 +911,144 @@ function MarginsTab({ showToast }) {
 
       <button onClick={save} className="btn-primary w-full"><Save size={14} />Save Settings</button>
     </>
+  )
+}
+
+// ── Security ───────────────────────────────────────────────────────────────
+function SecurityTab({ showToast }) {
+  const [timeoutMins, setTimeoutMins] = useState(30)
+  const [forcingLock, setForcingLock] = useState(false)
+
+  useEffect(() => {
+    getSetting('session_timeout_mins', 30).then(v => setTimeoutMins(Number(v)))
+  }, [])
+
+  const save = async () => {
+    await setSetting('session_timeout_mins', Number(timeoutMins))
+    showToast('Security settings saved')
+  }
+
+  const forceLogoutAll = async () => {
+    setForcingLock(true)
+    try {
+      const now = new Date().toISOString()
+      await setSetting('force_lock_at', now)
+      // Also push directly to Supabase if connected so other devices see it immediately
+      try {
+        const { getSupabaseClient } = await import('../lib/sync')
+        const sb = await getSupabaseClient()
+        if (sb) await sb.from('settings').upsert({ key: 'force_lock_at', value: now }, { onConflict: 'key' })
+      } catch {}
+      showToast('All sessions will lock within 30 seconds', 'success')
+    } finally {
+      setForcingLock(false)
+    }
+  }
+
+  return (
+    <>
+      <Section title="Session Timeout" desc="Lock the screen after this period of inactivity. The cashier must re-enter their PIN to continue.">
+        <Field label="Lock after">
+          <select value={timeoutMins} onChange={e => setTimeoutMins(Number(e.target.value))} className="input text-sm">
+            <option value={0}>Never (disabled)</option>
+            <option value={5}>5 minutes</option>
+            <option value={10}>10 minutes</option>
+            <option value={15}>15 minutes</option>
+            <option value={30}>30 minutes</option>
+            <option value={60}>1 hour</option>
+          </select>
+        </Field>
+        <p className="text-[10px] text-gray-400 mt-2">
+          Activity (taps, key presses) resets the timer. Set to 0 to keep the session open until manual logout.
+        </p>
+      </Section>
+      <button onClick={save} className="btn-primary w-full"><Save size={14} />Save Security Settings</button>
+
+      <Section title="Force Lock All Devices" desc="Immediately lock all active sessions on every device. Useful if a cashier left a device unattended.">
+        <button
+          onClick={forceLogoutAll}
+          disabled={forcingLock}
+          className="btn-danger w-full"
+          style={{ marginTop: 4 }}
+        >
+          <Shield size={14} />{forcingLock ? 'Locking sessions…' : 'Force Lock All Sessions'}
+        </button>
+        <p className="text-[10px] text-gray-400 mt-2">
+          Each connected device will lock within 30 seconds. Staff must re-enter their PIN to continue.
+        </p>
+      </Section>
+    </>
+  )
+}
+
+// ── Audit log ──────────────────────────────────────────────────────────────
+function AuditTab() {
+  const [rows, setRows]         = useState([])
+  const [loading, setLoading]   = useState(true)
+  const [search, setSearch]     = useState('')
+
+  useEffect(() => {
+    db.auditLog.orderBy('timestamp').reverse().limit(200).toArray().then(r => {
+      setRows(r)
+      setLoading(false)
+    })
+  }, [])
+
+  const filtered = rows.filter(r =>
+    !search ||
+    r.action?.toLowerCase().includes(search.toLowerCase()) ||
+    r.userName?.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const ACTION_COLORS = {
+    return_completed: '#f59e0b',
+    stock_adjusted:   '#3b82f6',
+    product_edited:   '#8b5cf6',
+    product_added:    '#10b981',
+    sale_voided:      '#ef4444',
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Filter by action or user…" className="input text-sm w-full" />
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          {[...Array(5)].map((_, i) => <div key={i} className="h-14 rounded-xl bg-gray-100 animate-pulse" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <ScrollText size={28} className="mx-auto mb-2 opacity-30" />
+          <p className="text-sm font-medium">No audit entries found</p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {filtered.map((r, i) => {
+            const color = ACTION_COLORS[r.action] || '#6b7280'
+            let details = ''
+            try { details = r.details ? JSON.stringify(JSON.parse(r.details), null, 0).replace(/[{}"]/g, '').replace(/,/g, ' · ') : '' } catch {}
+            return (
+              <div key={r.id || i} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, marginTop: 5, flexShrink: 0 }} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-xs font-bold text-gray-900">{r.action?.replace(/_/g, ' ')}</span>
+                    <span className="text-[10px] text-gray-400 shrink-0">
+                      {new Date(r.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">{r.userName || 'system'}{details ? ' · ' + details : ''}</div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <p className="text-[10px] text-gray-400 text-center">Showing last 200 entries</p>
+    </div>
   )
 }
 

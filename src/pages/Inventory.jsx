@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   Search, Plus, Edit2, Trash2, Package, AlertTriangle, Download, Upload,
-  X, ChevronDown, Filter, Box, Layers, RefreshCw, Check, Tag
+  X, ChevronDown, Filter, Box, Layers, RefreshCw, Check, Tag, ScanLine, History,
 } from 'lucide-react'
 import { db, logAudit, getTotalUnits, autoConvert, getSetting, saveSetting, setSetting } from '../lib/db'
 import { fmt } from '../lib/utils'
 import { CATEGORIES, SHOP_INFO } from '../data/initial-inventory'
+import { useBarcodeScanner } from '../lib/useBarcode'
 
 const EMPTY_PRODUCT = {
   sku: '', name: '', category: CATEGORIES[0],
@@ -68,9 +69,35 @@ export default function Inventory({ user }) {
   const [customCategories, setCustomCategories] = useState([])
   const [catModal, setCatModal]               = useState(false)
   const [newCatInput, setNewCatInput]         = useState('')
+  const [historyModal, setHistoryModal]       = useState(null) // product object
+  const [historyRows, setHistoryRows]         = useState([])
+
+  const searchRef = useRef(null)
 
   const showToast = (msg, type = 'info') => { setToast({ msg, type }); setTimeout(() => setToast(''), 2500) }
   const load = async () => { const p = await db.products.toArray(); setProducts(p) }
+
+  // Barcode scanner — when user scans a SKU while on Inventory, filter to it.
+  // If it matches exactly one product and no modal is open, open its edit form.
+  const handleScan = useCallback((code) => {
+    if (editModal || deleteConfirm || stockAdjModal || importModal || historyModal) return
+    setSearch(code)
+    if (searchRef.current) searchRef.current.value = code
+    const matches = products.filter(p => p.active && p.sku && p.sku.toLowerCase() === code.toLowerCase())
+    if (matches.length === 1 && !readOnly) {
+      setEditModal({ ...matches[0] })
+    } else if (matches.length === 0) {
+      showToast(`SKU not found: ${code}`, 'warning')
+    }
+  }, [editModal, deleteConfirm, stockAdjModal, importModal, historyModal, products, readOnly])
+
+  useBarcodeScanner(handleScan)
+
+  const openHistory = useCallback(async (product) => {
+    const rows = await db.stockMovements.where('productId').equals(product.id).reverse().sortBy('timestamp')
+    setHistoryRows(rows)
+    setHistoryModal(product)
+  }, [])
 
   // Load custom categories from settings
   const loadCategories = async () => {
@@ -394,22 +421,31 @@ export default function Inventory({ user }) {
                     )}
                   </td>
                   <td className="text-right">
-                    {!readOnly && (
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
                       <button
-                        onClick={() => setEditModal({ ...p })}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition"
+                        onClick={() => openHistory(p)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition"
+                        title="Stock history"
                       >
-                        <Edit2 size={13} />
+                        <History size={13} />
                       </button>
-                      <button
-                        onClick={() => setDeleteConfirm(p)}
-                        className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {!readOnly && (
+                        <>
+                          <button
+                            onClick={() => setEditModal({ ...p })}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm(p)}
+                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      )}
                     </div>
-                    )}
                   </td>
                 </tr>
               )
@@ -692,6 +728,64 @@ export default function Inventory({ user }) {
           </div>
         </div>
       )}
+      {/* ── Stock history modal ── */}
+      {historyModal && (
+        <div className="modal-overlay animate-fade-in" onClick={() => setHistoryModal(null)}>
+          <div className="modal-box-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 shrink-0">
+              <div>
+                <p className="font-bold text-gray-900 text-sm">Stock History</p>
+                <p className="text-xs text-gray-400">{historyModal.name} · {historyModal.sku}</p>
+              </div>
+              <button onClick={() => setHistoryModal(null)}><X size={17} className="text-gray-400" /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto no-scrollbar">
+              {historyRows.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <History size={28} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm font-medium">No movements recorded</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400">Date</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400">Type</th>
+                      <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-400">Qty</th>
+                      <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-400">Balance</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 hidden sm:table-cell">Ref</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyRows.map((r, i) => {
+                      const isIn = r.type === 'adjustment-in' || r.type === 'return' || r.type === 'receive'
+                      const typeLabel = { 'adjustment-in': 'Stock In', 'adjustment-out': 'Stock Out', 'return': 'Return', 'sale': 'Sale', 'receive': 'Received' }[r.type] || r.type
+                      return (
+                        <tr key={r.id || i} className="border-b border-gray-50 hover:bg-gray-50 transition">
+                          <td className="px-4 py-2.5 text-xs text-gray-500">
+                            {new Date(r.timestamp).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className={`text-xs font-semibold ${isIn ? 'text-green-600' : 'text-red-500'}`}>{typeLabel}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-xs font-bold" style={{ color: isIn ? '#10b981' : '#ef4444' }}>
+                            {isIn ? '+' : '−'}{r.qty}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-xs text-gray-600 font-mono">
+                            {r.balanceUnits ?? '—'}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-gray-400 hidden sm:table-cell truncate max-w-[120px]">{r.ref || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div className={`toast ${toast.type === 'success' ? 'toast-success' : toast.type === 'error' ? 'toast-error' : 'toast-info'}`}>
           {toast.msg}

@@ -314,6 +314,11 @@ async function printViaSunmiJSAPI(record, shop, settings) {
 
 // ── Bluetooth ESC/POS ──────────────────────────────────────────────────────
 async function printViaBluetooth(record, shop, settings, paperWidth) {
+  // Inside the native WebView APK, navigator.bluetooth is unavailable but the
+  // Android Classic BT bridge is injected as window._NativeBT by MainActivity.
+  if (typeof window._NativeBT !== 'undefined') {
+    return printViaNativeBT(record, shop, settings, paperWidth)
+  }
   if (!navigator.bluetooth) throw new Error('Web Bluetooth not supported on this browser/device')
 
   // Try to use a previously saved device first (by name match from saved_printers)
@@ -382,6 +387,25 @@ async function printViaRawBT(record, shop, settings, paperWidth) {
   })
   // With no-cors the response is always opaque (status 0), but a network-level
   // error (connection refused = RawBT not running) still rejects the promise.
+}
+
+// ── Native Android Bluetooth (WebView APK only) ───────────────────────────
+// window._NativeBT is injected by MainActivity.kt when running inside the APK.
+// The user picks a paired device; the native bridge sends ESC/POS bytes over
+// Classic BT (SPP/RFCOMM) instead of Web Bluetooth.
+async function printViaNativeBT(record, shop, settings, paperWidth) {
+  const bt = window._NativeBT
+  const devices = bt.scan()
+  if (!devices.length) throw new Error('No paired Bluetooth printers found. Pair the printer in Android Settings first.')
+
+  // If only one device, use it directly; otherwise surface a picker.
+  // For now we use the first paired device. A settings UI can be added later.
+  const savedMac = await getSetting('native_bt_mac', devices[0]?.address || '')
+  if (!savedMac) throw new Error('No Bluetooth printer MAC configured.')
+
+  const data = buildEscPos(record, shop, settings, paperWidth)
+  const ok = bt.print(data, savedMac)
+  if (!ok) throw new Error('Bluetooth print failed — is the printer on and paired?')
 }
 
 // ── Network/USB print via raw TCP socket proxy or fetch ────────────────────
@@ -672,4 +696,113 @@ export async function printReceipt(record, shop, settings, htmlContent) {
   // ── 4. Browser (default) ──────────────────────────────────────────────────
   await printViaBrowser(htmlContent)
   return { ok: true, method: 'browser' }
+}
+
+// ── Purchase Order print ───────────────────────────────────────────────────
+export async function printPurchaseOrder(po, shop) {
+  const orderTotal = (po.items || []).reduce((s, i) => s + (i.qty || 0) * (i.unitCost || 0), 0)
+  const dateStr = new Date(po.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  const itemRows = (po.items || []).map(item => {
+    const line = (item.qty || 0) * (item.unitCost || 0)
+    const recvd = po.receivedItems?.find(r => r.sku === item.sku)
+    return `<div class="flex" style="padding:4px 0;border-bottom:1px dotted #ddd">
+      <div style="flex:1">
+        <div class="bold" style="font-size:13px">${item.name}</div>
+        <div style="font-size:10px;color:#666">${item.sku}</div>
+        ${recvd ? `<div style="font-size:10px;color:#10b981;font-weight:700">Received: ${recvd.receivedQty}</div>` : ''}
+      </div>
+      <div style="text-align:right;font-size:12px;white-space:nowrap">
+        ${item.qty} × $${(item.unitCost || 0).toFixed(2)}<br>
+        <span class="bold">$${line.toFixed(2)}</span>
+      </div>
+    </div>`
+  }).join('')
+
+  const html = `
+    <div class="center mb-2">
+      <div class="bold" style="font-size:16px">${shop?.name || 'PORTIONSPOT'}</div>
+      ${shop?.address ? `<div style="font-size:11px">${shop.address}</div>` : ''}
+      ${shop?.phones ? `<div style="font-size:11px">${Array.isArray(shop.phones) ? shop.phones.join(' / ') : shop.phones}</div>` : ''}
+    </div>
+    <hr>
+    <div class="center bold" style="font-size:14px;margin-bottom:6px">PURCHASE ORDER</div>
+    <div class="flex"><span>PO Ref:</span><span class="bold">${po.ref}</span></div>
+    <div class="flex"><span>Date:</span><span>${dateStr}</span></div>
+    <div class="flex"><span>Supplier:</span><span class="bold">${po.supplierName || '—'}</span></div>
+    <div class="flex"><span>Status:</span><span>${(po.status || '').toUpperCase()}</span></div>
+    ${po.notes ? `<div style="font-size:11px;color:#555;margin-top:4px;padding:4px 0">Note: ${po.notes}</div>` : ''}
+    <hr>
+    ${itemRows}
+    <hr>
+    <div class="flex bold" style="font-size:14px;padding-top:4px">
+      <span>ORDER TOTAL</span><span>$${orderTotal.toFixed(2)}</span>
+    </div>
+    <div style="margin-top:14px;font-size:10px;color:#888;text-align:center">
+      Printed ${new Date().toLocaleString('en-GB')}
+    </div>`
+
+  return printViaBrowser(html)
+}
+
+// ── Customer Statement print ───────────────────────────────────────────────
+export async function printCustomerStatement(customer, purchases, creditTxs, shop) {
+  const totalSpent   = purchases.reduce((a, s) => a + (s.grandTotal || s.total || 0), 0)
+  const outstanding  = creditTxs
+    .filter(t => !t.settled && (t.type === 'credit_owed' || t.type === 'change_owed'))
+    .reduce((a, t) => a + t.amount, 0)
+
+  const saleRows = purchases.slice(0, 60).map(s => `
+    <div class="flex" style="padding:3px 0;border-bottom:1px dotted #eee;font-size:11px">
+      <div style="flex:1">
+        <span class="bold">${s.ref || s.id}</span>
+        <span style="color:#666;margin-left:6px">${new Date(s.createdAt).toLocaleDateString('en-GB')}</span>
+        ${s.cashier ? `<span style="color:#999;margin-left:4px">· ${s.cashier}</span>` : ''}
+      </div>
+      <span class="bold">$${(s.grandTotal || s.total || 0).toFixed(2)}</span>
+    </div>`).join('')
+
+  const typeLabels = { change_owed: 'Change Owed', change_paid: 'Change Paid', credit_owed: 'Credit Owed', credit_paid: 'Credit Paid' }
+  const creditRows = creditTxs.slice(0, 40).map(t => `
+    <div class="flex" style="padding:3px 0;border-bottom:1px dotted #eee;font-size:11px">
+      <div style="flex:1">
+        <span class="bold">${typeLabels[t.type] || t.type}</span>
+        <span style="color:#666;margin-left:6px">${new Date(t.createdAt).toLocaleDateString('en-GB')}</span>
+        ${t.settled ? '<span style="color:#10b981;font-size:9px"> ✓ settled</span>' : ''}
+        ${t.note ? `<div style="color:#666;font-size:10px">${t.note}</div>` : ''}
+      </div>
+      <span class="bold" style="color:${t.type.includes('owed') && !t.settled ? '#dc2626' : '#111'}">$${(t.amount || 0).toFixed(2)}</span>
+    </div>`).join('')
+
+  const html = `
+    <div class="center mb-2">
+      <div class="bold" style="font-size:16px">${shop?.name || 'PORTIONSPOT'}</div>
+      ${shop?.address ? `<div style="font-size:11px">${shop.address}</div>` : ''}
+    </div>
+    <hr>
+    <div class="center bold" style="font-size:14px;margin-bottom:6px">CUSTOMER STATEMENT</div>
+    <div class="flex"><span>Customer:</span><span class="bold">${customer.name}</span></div>
+    ${customer.phone ? `<div class="flex"><span>Phone:</span><span>${customer.phone}</span></div>` : ''}
+    ${customer.email ? `<div class="flex"><span>Email:</span><span>${customer.email}</span></div>` : ''}
+    ${customer.isTradeAccount ? '<div style="font-size:10px;color:#3b82f6;font-weight:700;margin-top:2px">★ Trade Account</div>' : ''}
+    <div style="font-size:10px;color:#888;margin-top:4px">Printed: ${new Date().toLocaleString('en-GB')}</div>
+    <hr>
+    <div class="bold" style="font-size:11px;margin-bottom:4px">PURCHASE HISTORY (${purchases.length} sale${purchases.length !== 1 ? 's' : ''})</div>
+    ${saleRows || '<div style="color:#888;font-size:11px;padding:4px 0">No purchases on record</div>'}
+    <hr>
+    <div class="flex bold" style="font-size:13px"><span>Total Spent</span><span>$${totalSpent.toFixed(2)}</span></div>
+    ${creditTxs.length > 0 ? `
+    <div style="margin-top:10px">
+      <div class="bold" style="font-size:11px;margin-bottom:4px">CREDIT & CHANGE LOG</div>
+      ${creditRows}
+      <hr>
+      <div class="flex bold" style="font-size:13px;color:${outstanding > 0 ? '#dc2626' : '#10b981'}">
+        <span>Outstanding Balance</span><span>$${outstanding.toFixed(2)}</span>
+      </div>
+    </div>` : ''}
+    <div style="margin-top:14px;font-size:9px;color:#aaa;text-align:center">
+      This statement was generated on ${new Date().toLocaleString('en-GB')}
+    </div>`
+
+  return printViaBrowser(html)
 }

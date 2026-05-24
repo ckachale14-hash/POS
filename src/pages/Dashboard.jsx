@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   TrendingUp, TrendingDown, DollarSign, ShoppingBag,
   Users, Package, Banknote, Smartphone, CreditCard,
-  FileCheck, RefreshCw, ArrowUpRight, AlertTriangle, ChevronRight
+  FileCheck, RefreshCw, ArrowUpRight, AlertTriangle, ChevronRight,
+  ClipboardList, X, Printer
 } from 'lucide-react'
 import { db } from '../lib/db'
 import { fmt, round2 } from '../lib/utils'
@@ -148,6 +149,9 @@ export default function Dashboard({ user, navigate }) {
   const [range, setRange]         = useState(null)
   const [lastRefresh, setLastRefresh] = useState(null)
   const [spinning, setSpinning]   = useState(false)
+  const [zOpen, setZOpen]         = useState(false)
+  const [zCounted, setZCounted]   = useState('')
+  const [zFloat, setZFloat]       = useState('')
   const intervalRef = useRef(null)
 
   const loadData = useCallback(async (from, to, pf) => {
@@ -156,6 +160,7 @@ export default function Dashboard({ user, navigate }) {
     const products  = await db.products.toArray()
     const customers = await db.customers.toArray()
     const creditTxs = await db.creditTransactions.toArray()
+    const allExpenses = await db.expenses.toArray()
 
     const inRange = completed.filter(s => {
       const d = new Date(s.createdAt)
@@ -189,6 +194,29 @@ export default function Dashboard({ user, navigate }) {
         return { sku, name: p?.name || sku, revenue: round2(rev) }
       })
 
+    // Gross profit (requires costPrice on products)
+    const productMap = {}
+    products.forEach(p => { productMap[p.sku] = p })
+    const grossProfit = inRange.reduce((sum, s) => {
+      for (const item of (s.items || [])) {
+        const cost = productMap[item.sku]?.costPrice || 0
+        sum += (item.unitPrice - cost) * item.qty
+      }
+      return sum
+    }, 0)
+    const marginPct = revenue > 0 ? round2((grossProfit / revenue) * 100) : 0
+
+    // Expenses in range
+    const expensesInRange = allExpenses.filter(e => {
+      if (!e.date) return false
+      const d = new Date(e.date + 'T00:00:00')
+      if (from && d < from) return false
+      if (to   && d > to  ) return false
+      return true
+    })
+    const totalExpenses = round2(expensesInRange.reduce((s, e) => s + (e.amount || 0), 0))
+    const netProfit = round2(grossProfit - totalExpenses)
+
     const lowStock = products.filter(p => {
       const total = (p.stockBoxes || 0) * (p.boxSize || 1) + (p.stockUnits || 0)
       return total < (p.lowStockThreshold || 5) && total > 0 && p.active
@@ -197,6 +225,7 @@ export default function Dashboard({ user, navigate }) {
       const total = (p.stockBoxes || 0) * (p.boxSize || 1) + (p.stockUnits || 0)
       return total <= 0 && p.active
     }).length
+    const noCostPrice = products.filter(p => p.active && !p.costPrice).length
 
     const pendingCredit = creditTxs
       .filter(t => !t.settled && (t.type === 'credit_owed' || t.type === 'change_owed'))
@@ -218,7 +247,7 @@ export default function Dashboard({ user, navigate }) {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, 6)
 
-    setData({ revenue, discount, txCount, avgSale, byMethod, topProducts, lowStock, outStock, totalProducts: products.filter(p => p.active).length, totalCustomers: customers.length, pendingCredit: round2(pendingCredit), recentSales, last7 })
+    setData({ revenue, discount, txCount, avgSale, byMethod, topProducts, lowStock, outStock, noCostPrice, totalProducts: products.filter(p => p.active).length, totalCustomers: customers.length, pendingCredit: round2(pendingCredit), recentSales, last7, grossProfit: round2(grossProfit), marginPct, totalExpenses, netProfit })
     setLoading(false)
     setLastRefresh(new Date())
   }, [])
@@ -265,6 +294,9 @@ export default function Dashboard({ user, navigate }) {
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => { setZCounted(''); setZFloat(''); setZOpen(true) }} className="btn-ghost" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+              <ClipboardList size={13} />Z-Report
+            </button>
             <button onClick={handleRefresh} className="btn-ghost" style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
               <RefreshCw size={13} style={{ transition: 'transform 700ms', transform: spinning ? 'rotate(720deg)' : 'rotate(0deg)' }} />
               Refresh
@@ -314,6 +346,23 @@ export default function Dashboard({ user, navigate }) {
               </div>
               <KpiCard title="Transactions" value={data.txCount} icon={ShoppingBag} color="#3b82f6" bg="rgba(59,130,246,0.1)" prefix="" decimals={0} />
               <KpiCard title="Avg Sale" value={data.avgSale} icon={TrendingUp} color="#10b981" bg="rgba(16,185,129,0.1)" prefix="$" />
+              {data.noCostPrice === 0 ? (
+                <>
+                  <KpiCard title="Gross Profit" value={data.grossProfit} icon={TrendingUp} color="#10b981" bg="rgba(16,185,129,0.1)" prefix="$" />
+                  <KpiCard title="Margin" value={data.marginPct} icon={TrendingDown} color="#8b5cf6" bg="rgba(139,92,246,0.1)" prefix="" decimals={1} />
+                  {data.totalExpenses > 0 && (
+                    <>
+                      <KpiCard title="Expenses" value={data.totalExpenses} icon={TrendingDown} color="#ef4444" bg="rgba(239,68,68,0.1)" prefix="$" />
+                      <KpiCard title="Net Profit" value={data.netProfit} icon={TrendingUp} color={data.netProfit >= 0 ? '#10b981' : '#ef4444'} bg={data.netProfit >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'} prefix="$" />
+                    </>
+                  )}
+                </>
+              ) : (
+                <div style={{ gridColumn: '1 / -1', padding: '10px 14px', borderRadius: 14, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertTriangle size={13} style={{ color: '#f59e0b', flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: '#b45309' }}>Profit hidden — {data.noCostPrice} products missing cost price</span>
+                </div>
+              )}
             </div>
 
             {/* 7-day bar chart */}
@@ -387,6 +436,14 @@ export default function Dashboard({ user, navigate }) {
                 <div style={{ fontSize: 11, color: 'var(--ink-tertiary)', marginTop: 2, fontWeight: 500 }}>Products</div>
                 {data.lowStock > 0 && <div style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', marginTop: 6, display: 'flex', alignItems: 'center', gap: 3 }}><AlertTriangle size={9} />{data.lowStock} low stock</div>}
                 {data.outStock > 0 && <div style={{ fontSize: 10, fontWeight: 700, color: '#ef4444', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}><AlertTriangle size={9} />{data.outStock} out of stock</div>}
+                {data.noCostPrice > 0 && (
+                  <div
+                    onClick={() => navigate && navigate('inventory')}
+                    style={{ fontSize: 10, fontWeight: 700, color: '#f59e0b', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3, cursor: navigate ? 'pointer' : 'default' }}
+                  >
+                    <AlertTriangle size={9} />{data.noCostPrice} missing cost price
+                  </div>
+                )}
               </div>
 
               <div style={{ background: 'var(--surface-1)', border: data.pendingCredit > 0 ? '1px solid rgba(245,158,11,0.22)' : '1px solid var(--surface-border)', borderRadius: 20, padding: 16, boxShadow: 'var(--shadow-sm)' }}>
@@ -446,6 +503,115 @@ export default function Dashboard({ user, navigate }) {
           </div>
         ) : null}
       </div>
+
+      {/* Z-Report modal */}
+      {zOpen && data && (() => {
+        const cash = data.byMethod.cash || 0
+        const floatAmt = parseFloat(zFloat) || 0
+        const expected = round2(floatAmt + cash)
+        const counted  = parseFloat(zCounted) || 0
+        const variance = round2(counted - expected)
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end' }}
+            onClick={() => setZOpen(false)}>
+            <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: 'var(--surface-1)', borderRadius: '24px 24px 0 0', padding: '20px 20px 36px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: 'var(--ink-primary)', letterSpacing: '-0.02em' }}>Z-Report</div>
+                  <div style={{ fontSize: 10, color: 'var(--ink-tertiary)', marginTop: 2 }}>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
+                </div>
+                <button onClick={() => setZOpen(false)} style={{ padding: 8, borderRadius: 10, border: '1px solid var(--surface-border)', background: 'var(--surface-2)', cursor: 'pointer' }}>
+                  <X size={14} style={{ color: 'var(--ink-tertiary)' }} />
+                </button>
+              </div>
+
+              <div style={{ background: 'var(--surface-2)', borderRadius: 16, padding: 14, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ink-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Sales Summary</div>
+                {Object.entries(PAY_CONFIG).map(([key, cfg]) => {
+                  const amt = data.byMethod[key] || 0
+                  if (!amt) return null
+                  const Icon = cfg.icon
+                  return (
+                    <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--surface-border)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Icon size={12} style={{ color: cfg.color }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-primary)' }}>{cfg.label}</span>
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--ink-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(amt)}</span>
+                    </div>
+                  )
+                })}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0 0' }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--ink-primary)' }}>Total Revenue</span>
+                  <span style={{ fontSize: 14, fontWeight: 900, color: 'var(--brand-600)', fontVariantNumeric: 'tabular-nums' }}>{fmt(data.revenue)}</span>
+                </div>
+              </div>
+
+              <div style={{ background: 'var(--surface-2)', borderRadius: 16, padding: 14, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ink-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Cash Reconciliation</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-tertiary)', display: 'block', marginBottom: 4 }}>Opening float ($)</label>
+                    <input type="number" value={zFloat} onChange={e => setZFloat(e.target.value)} placeholder="0.00"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 10, border: '1px solid var(--surface-border)', background: 'var(--surface-1)', fontSize: 14, color: 'var(--ink-primary)' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
+                    <span style={{ fontSize: 12, color: 'var(--ink-secondary)' }}>Cash sales</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(cash)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid var(--surface-border)' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-primary)' }}>Expected in drawer</span>
+                    <span style={{ fontSize: 13, fontWeight: 900, color: 'var(--ink-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(expected)}</span>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: 'var(--ink-tertiary)', display: 'block', marginBottom: 4 }}>Counted cash ($)</label>
+                    <input type="number" value={zCounted} onChange={e => setZCounted(e.target.value)} placeholder="0.00"
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 10, border: '1px solid var(--surface-border)', background: 'var(--surface-1)', fontSize: 14, color: 'var(--ink-primary)' }} />
+                  </div>
+                  {zCounted !== '' && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: 10, background: variance === 0 ? 'rgba(16,185,129,0.08)' : variance > 0 ? 'rgba(59,130,246,0.08)' : 'rgba(239,68,68,0.08)' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-primary)' }}>{variance === 0 ? 'Balanced' : variance > 0 ? 'Over' : 'Short'}</span>
+                      <span style={{ fontSize: 14, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: variance === 0 ? '#10b981' : variance > 0 ? '#3b82f6' : '#ef4444' }}>
+                        {variance > 0 ? '+' : ''}{fmt(variance)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {data.grossProfit > 0 && data.noCostPrice === 0 && (
+                <div style={{ background: 'var(--surface-2)', borderRadius: 16, padding: 14, marginBottom: 12 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--ink-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>Profitability</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <span style={{ fontSize: 12, color: 'var(--ink-secondary)' }}>Gross Profit</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#10b981', fontVariantNumeric: 'tabular-nums' }}>{fmt(data.grossProfit)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                    <span style={{ fontSize: 12, color: 'var(--ink-secondary)' }}>Margin</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#8b5cf6' }}>{data.marginPct}%</span>
+                  </div>
+                  {data.totalExpenses > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderTop: '1px solid var(--surface-border)', marginTop: 4 }}>
+                        <span style={{ fontSize: 12, color: 'var(--ink-secondary)' }}>Expenses</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: '#ef4444', fontVariantNumeric: 'tabular-nums' }}>−{fmt(data.totalExpenses)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 2px' }}>
+                        <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--ink-primary)' }}>Net Profit</span>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: data.netProfit >= 0 ? '#10b981' : '#ef4444', fontVariantNumeric: 'tabular-nums' }}>{fmt(data.netProfit)}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <button onClick={() => window.print()} style={{ width: '100%', padding: '12px', borderRadius: 14, background: 'var(--brand-600)', color: '#fff', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Printer size={14} />Print Z-Report
+              </button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

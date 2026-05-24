@@ -63,7 +63,7 @@ async function pushProducts(sb, log) {
   const { error } = await sb.from('products').upsert(rows, { onConflict: 'sku' })
   if (error) throw new Error('products: ' + error.message)
   const now = new Date().toISOString()
-  for (const p of products) await db.products.update(p.id, { syncedAt: now })
+  for (const p of products) await db.products.update(p.id, { syncedAt: now, updatedAt: now })
   log && log(`✓ Pushed ${products.length} product(s)`)
   return { pushed: products.length }
 }
@@ -147,6 +147,10 @@ async function pullProducts(sb, log) {
       updatedAt: row.updated_at,
     }
     if (existing) {
+      // Conflict resolution: only pull if remote is newer than local edits.
+      // If localUpdatedAt > remote updated_at, our local change wins — skip.
+      const localUpdatedAt = existing.updatedAt || existing.syncedAt || '2000-01-01T00:00:00Z'
+      if (row.updated_at <= localUpdatedAt) continue
       await db.products.update(existing.id, mapped)
     } else {
       await db.products.add(mapped)
@@ -201,8 +205,17 @@ async function pullCustomers(sb, log) {
       isTradeAccount: row.is_trade_account, notes: row.notes || '',
       syncedAt: new Date().toISOString(),
     }
-    if (existing) await db.customers.update(existing.id, mapped)
-    else await db.customers.add(mapped)
+    if (existing) {
+      // Conflict resolution: local edit (syncedAt=null) beats a remote pull.
+      // If we have an unsynced local change, skip overwriting with remote data.
+      if (!existing.syncedAt) continue
+      // If remote record was updated before our last sync, skip (we already have newer).
+      const lastKnownSync = existing.syncedAt || '2000-01-01T00:00:00Z'
+      if (row.updated_at <= lastKnownSync) continue
+      await db.customers.update(existing.id, mapped)
+    } else {
+      await db.customers.add(mapped)
+    }
   }
   await setSetting('last_pull_customers', new Date().toISOString())
   log && log(`↓ Pulled ${data.length} customer(s)`)

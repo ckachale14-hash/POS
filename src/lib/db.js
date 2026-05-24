@@ -48,6 +48,59 @@ export async function logAudit(action, user, details = {}) {
   })
 }
 
+// ── Purchase Orders ────────────────────────────────────────────────────────
+export async function createPurchaseOrder({ supplierId, supplierName, items, notes }) {
+  const ref = genRef('PO')
+  const id = await db.purchaseOrders.add({
+    ref, supplierId, supplierName,
+    items,   // [{ sku, name, qty, unitCost }]
+    notes: notes || '',
+    status: 'draft',
+    createdAt: new Date().toISOString(),
+    sentAt: null,
+    receivedAt: null,
+  })
+  return { id, ref }
+}
+
+export async function updatePurchaseOrder(id, patch) {
+  await db.purchaseOrders.update(id, patch)
+}
+
+/**
+ * Receive stock against a PO. receivedItems = [{ sku, name, qty, receivedQty, unitCost }]
+ * Updates product stock and records stockMovements for each received line.
+ */
+export async function receivePurchaseOrder(po, receivedItems, userId) {
+  for (const item of receivedItems) {
+    if (!item.receivedQty || item.receivedQty <= 0) continue
+    const product = await db.products.where('sku').equals(item.sku).first()
+    if (!product) continue
+
+    let { stockBoxes = 0, stockUnits = 0, boxSize = 1 } = product
+    stockUnits += Number(item.receivedQty)
+    const converted = autoConvert(stockBoxes, stockUnits, boxSize, true)
+
+    await db.products.update(product.id, { stockBoxes: converted.stockBoxes, stockUnits: converted.stockUnits })
+    await db.stockMovements.add({
+      productId: product.id,
+      type: 'receive',
+      qty: Number(item.receivedQty),
+      balanceUnits: converted.stockBoxes * boxSize + converted.stockUnits,
+      ref: po.ref,
+      userId: userId || null,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  await db.purchaseOrders.update(po.id, {
+    status: 'received',
+    receivedAt: new Date().toISOString(),
+    receivedItems,
+  })
+  await logAudit('po_received', { id: userId }, { ref: po.ref, items: receivedItems.length })
+}
+
 // ── Sync queue ─────────────────────────────────────────────────────────────
 export async function queueSync(table, recordId, op, payload) {
   await db.syncQueue.add({
@@ -199,6 +252,82 @@ export async function getHeldSales() {
 
 export async function removeHeldSale(id) {
   await db.sales.delete(id)
+}
+
+/**
+ * Record a stock return against a completed sale.
+ *
+ * returnedItems: subset of the original sale's items, each with the qty
+ * the customer is returning (may be less than the original qty).
+ *
+ * The return record has a negative grandTotal so it automatically reduces
+ * revenue in all report aggregations.
+ */
+const r2 = n => Math.round(n * 100) / 100
+
+export async function returnSale(originalSale, returnedItems, reason, user) {
+  const ref = genRef('RTN')
+
+  // Total being refunded (positive value)
+  const refundTotal = returnedItems.reduce((sum, item) => {
+    const lineNet = item.unitPrice * item.qty - (item.lineDiscount || 0)
+    return sum + lineNet
+  }, 0)
+
+  const returnData = {
+    ref,
+    type:        'return',
+    status:      'completed',
+    originalRef: originalSale.ref || String(originalSale.id),
+    originalId:  String(originalSale.id),
+    customer:    originalSale.customer,
+    customerId:  originalSale.customerId,
+    items:       returnedItems,
+    subtotal:    -r2(refundTotal),
+    grandTotal:  -r2(refundTotal),   // negative = cash going back out
+    reason,
+    payMethod:   originalSale.payMethod,
+    cashier:     user?.name,
+    cashierId:   user?.id,
+    createdAt:   new Date().toISOString(),
+    syncedAt:    null,
+  }
+
+  // Restore stock for every returned item
+  for (const item of returnedItems) {
+    const product = await db.products.where('sku').equals(item.sku).first()
+    if (!product) continue
+
+    let stockBoxes = product.stockBoxes || 0
+    let stockUnits = product.stockUnits || 0
+    const boxSize  = product.boxSize || 1
+
+    if (item.mode === 'box') {
+      stockBoxes += item.qty
+    } else {
+      stockUnits += item.qty
+      const converted = autoConvert(stockBoxes, stockUnits, boxSize, true)
+      stockBoxes = converted.stockBoxes
+      stockUnits = converted.stockUnits
+    }
+
+    await db.products.update(product.id, { stockBoxes, stockUnits })
+    await db.stockMovements.add({
+      productId: product.id,
+      type:      'return',
+      qty:       item.qty,
+      ref,
+      userId:    user?.id || null,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  const id = await db.sales.add(returnData)
+  await logAudit('return_completed', user, {
+    ref, originalRef: originalSale.ref, items: returnedItems.length,
+    refundTotal: r2(refundTotal),
+  })
+  return { id, ref }
 }
 
 // ── Credit / Change transactions ───────────────────────────────────────────

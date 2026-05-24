@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { getAllProducts, getHeldSales, getSetting, getTotalUnits } from '../lib/db'
+import { getAllProducts, getHeldSales, removeHeldSale, getSetting, getTotalUnits } from '../lib/db'
 
 const SessionContext = createContext(null)
 
@@ -31,7 +31,11 @@ export function SessionProvider({ children }) {
 
   const refreshHeld = useCallback(async () => {
     const h = await getHeldSales()
-    setHeldSales(h)
+    const EXPIRY_MS = 24 * 60 * 60 * 1000
+    const now = Date.now()
+    const expired = h.filter(s => now - new Date(s.createdAt).getTime() > EXPIRY_MS)
+    await Promise.all(expired.map(s => removeHeldSale(s.id)))
+    setHeldSales(h.filter(s => now - new Date(s.createdAt).getTime() <= EXPIRY_MS))
   }, [])
 
   useEffect(() => {

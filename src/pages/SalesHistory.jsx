@@ -2,9 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Search, Download, Eye, X, ReceiptText, TrendingUp,
   BarChart2, DollarSign, Tag, ChevronDown, ArrowUpRight,
-  Banknote, Smartphone, CreditCard, FileCheck, Package
+  Banknote, Smartphone, CreditCard, FileCheck, Package,
+  RotateCcw, AlertTriangle, Check, Minus, Plus,
 } from 'lucide-react'
-import { db, getSetting } from '../lib/db'
+import { db, getSetting, returnSale } from '../lib/db'
 import { fmt, round2, formatDate } from '../lib/utils'
 import Receipt from '../components/Receipt.jsx'
 
@@ -218,6 +219,42 @@ export default function SalesHistory({ user }) {
   const [activePreset, setActivePreset] = useState('This Month')
   const [expandedSale, setExpandedSale] = useState(null)
 
+  // Return flow
+  const [returnModal, setReturnModal]   = useState(null)   // holds the original sale
+  const [returnQtys, setReturnQtys]     = useState({})     // sku → qty to return
+  const [returnReason, setReturnReason] = useState('')
+  const [returnBusy, setReturnBusy]     = useState(false)
+  const [returnToast, setReturnToast]   = useState(null)
+
+  const openReturn = (sale, e) => {
+    e.stopPropagation()
+    const initial = {}
+    ;(sale.items || []).forEach(item => { initial[`${item.sku}-${item.mode}`] = item.qty })
+    setReturnQtys(initial)
+    setReturnReason('')
+    setReturnModal(sale)
+  }
+
+  const submitReturn = async () => {
+    if (!returnReason.trim()) { setReturnToast('Please enter a return reason'); return }
+    const returnedItems = (returnModal.items || [])
+      .filter(item => (returnQtys[`${item.sku}-${item.mode}`] || 0) > 0)
+      .map(item => ({ ...item, qty: returnQtys[`${item.sku}-${item.mode}`] || 0 }))
+    if (returnedItems.length === 0) { setReturnToast('Select at least one item to return'); return }
+    setReturnBusy(true)
+    try {
+      const { ref } = await returnSale(returnModal, returnedItems, returnReason, user)
+      setReturnModal(null)
+      await loadSales()
+      setReturnToast(null)
+      // Brief success message via the page
+    } catch (err) {
+      setReturnToast(`Error: ${err.message}`)
+    } finally {
+      setReturnBusy(false)
+    }
+  }
+
   const loadSales = async () => {
     let all = await db.sales.orderBy('createdAt').reverse().toArray()
     if (user?.role === 'cashier') {
@@ -397,6 +434,7 @@ export default function SalesHistory({ user }) {
             <option value="all">All types</option>
             <option value="sale">Sales</option>
             <option value="quote">Quotes</option>
+            <option value="return">Returns</option>
           </select>
           <select value={payFilter} onChange={e => setPayFilter(e.target.value)} className="input" style={{ padding: '6px 8px', fontSize: 11, width: 'auto', flexShrink: 0 }}>
             <option value="all">All payments</option>
@@ -539,11 +577,19 @@ export default function SalesHistory({ user }) {
                           </td>
                           <td style={{ textAlign: 'right', fontWeight: 900, fontSize: 13, color: 'var(--ink-primary)', fontVariantNumeric: 'tabular-nums' }}>{fmt(s.grandTotal || s.total || 0)}</td>
                           <td>
-                            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', alignItems: 'center' }}>
                               <button onClick={e => { e.stopPropagation(); setViewReceipt(s) }}
-                                className="btn-ghost" style={{ padding: '4px 6px', color: 'var(--ink-tertiary)' }}>
+                                className="btn-ghost" style={{ padding: '4px 6px', color: 'var(--ink-tertiary)' }}
+                                title="View receipt">
                                 <Eye size={13} />
                               </button>
+                              {s.type === 'sale' && s.status === 'completed' && (
+                                <button onClick={e => openReturn(s, e)}
+                                  className="btn-ghost" style={{ padding: '4px 6px', color: '#f59e0b' }}
+                                  title="Return / Refund">
+                                  <RotateCcw size={13} />
+                                </button>
+                              )}
                               <div style={{ width: 13, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                 <ChevronDown size={11} style={{ color: 'var(--ink-tertiary)', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 200ms' }} />
                               </div>
@@ -705,6 +751,90 @@ export default function SalesHistory({ user }) {
       )}
 
       {viewReceipt && <Receipt record={viewReceipt} shop={shopInfo} onClose={() => setViewReceipt(null)} readOnly />}
+
+      {/* ── Return / Refund modal ── */}
+      {returnModal && (
+        <div className="modal-overlay animate-fade-in" onClick={() => setReturnModal(null)}>
+          <div className="modal-box-lg" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 shrink-0">
+              <div>
+                <p className="font-bold text-gray-900">Return — {returnModal.ref}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{returnModal.customer} · {new Date(returnModal.createdAt).toLocaleDateString('en-GB')}</p>
+              </div>
+              <button onClick={() => setReturnModal(null)}><X size={17} className="text-gray-400" /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+              {/* Item selection */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 mb-2">Items to return</p>
+                <div className="space-y-2">
+                  {(returnModal.items || []).filter(item => item.subMode !== 'units').map(item => {
+                    const key = `${item.sku}-${item.mode}`
+                    const qty = returnQtys[key] ?? item.qty
+                    return (
+                      <div key={key} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-900 truncate">{item.name}</p>
+                          <p className="text-[10px] text-gray-400">{item.label} · {fmt(item.unitPrice)}/ea · orig qty: {item.qty}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={() => setReturnQtys(q => ({ ...q, [key]: Math.max(0, (q[key] ?? item.qty) - 1) }))}
+                            className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition">
+                            <Minus size={11} className="text-gray-600" />
+                          </button>
+                          <span className="w-6 text-center text-sm font-black text-gray-900">{qty}</span>
+                          <button onClick={() => setReturnQtys(q => ({ ...q, [key]: Math.min(item.qty, (q[key] ?? item.qty) + 1) }))}
+                            className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-green-50 hover:border-green-200 transition">
+                            <Plus size={11} className="text-gray-600" />
+                          </button>
+                        </div>
+                        <div className="text-right shrink-0 w-16">
+                          <div className="text-xs font-black text-brand-600">{fmt(item.unitPrice * qty)}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Refund summary */}
+              <div className="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-semibold text-amber-800">Refund total</span>
+                  <span className="text-lg font-black text-amber-700">
+                    {fmt((returnModal.items || []).filter(i => i.subMode !== 'units').reduce((sum, item) => {
+                      const qty = returnQtys[`${item.sku}-${item.mode}`] ?? item.qty
+                      return sum + item.unitPrice * qty
+                    }, 0))}
+                  </span>
+                </div>
+              </div>
+
+              {/* Reason */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Return reason *</label>
+                <input value={returnReason} onChange={e => setReturnReason(e.target.value)}
+                  className="input text-sm" placeholder="e.g. Wrong part, defective, customer changed mind…" autoFocus />
+              </div>
+
+              {returnToast && (
+                <div className="flex items-center gap-2 px-3 py-2.5 bg-red-50 border border-red-100 rounded-xl text-xs font-medium text-red-700">
+                  <AlertTriangle size={13} />{returnToast}
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-100 flex gap-2 shrink-0">
+              <button onClick={() => setReturnModal(null)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={submitReturn} disabled={returnBusy}
+                className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-xl text-white bg-amber-500 hover:bg-amber-600 transition disabled:opacity-50">
+                <RotateCcw size={15} />{returnBusy ? 'Processing…' : 'Process Return'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

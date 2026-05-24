@@ -2,10 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Search, Plus, Edit2, Trash2, Users, Phone, Mail, X,
   CreditCard, ReceiptText, ChevronRight, ArrowLeft,
-  TrendingUp, DollarSign, Clock, CheckCircle2, RefreshCw
+  TrendingUp, DollarSign, Clock, CheckCircle2, RefreshCw, Printer
 } from 'lucide-react'
-import { db, logAudit } from '../lib/db'
+import { db, logAudit, getSetting } from '../lib/db'
 import { fmt, formatDate, round2 } from '../lib/utils'
+import { printCustomerStatement } from '../lib/printer'
 
 const EMPTY = {
   name: '', phone: '', email: '', address: '',
@@ -31,9 +32,16 @@ export default function Customers({ user, navigate }) {
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [detailTab, setDetailTab]     = useState('history') // 'history' | 'credit'
 
+  const [shopInfo, setShopInfo]       = useState({})
+  const [printing, setPrinting]       = useState(false)
+
   const showToast = (msg, type = 'info') => { setToast({ msg, type }); setTimeout(() => setToast(''), 2500) }
   const load = async () => { const c = await db.customers.toArray(); setCustomers(c) }
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    getSetting('shop_name').then(n => n && setShopInfo(prev => ({ ...prev, name: n })))
+    getSetting('shop_address').then(a => a && setShopInfo(prev => ({ ...prev, address: a })))
+  }, [])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -141,6 +149,18 @@ export default function Customers({ user, navigate }) {
             </div>
             <button onClick={() => setEditModal({ ...detailCustomer })} className="btn-secondary py-1.5 px-3 text-xs">
               <Edit2 size={12} />Edit
+            </button>
+            <button
+              onClick={async () => {
+                setPrinting(true)
+                try { await printCustomerStatement(detailCustomer, filteredPurchases, creditTxs, shopInfo) }
+                finally { setPrinting(false) }
+              }}
+              disabled={printing}
+              className="btn-ghost py-1.5 px-3 text-xs"
+              title="Print customer statement"
+            >
+              <Printer size={12} />{printing ? '…' : 'Statement'}
             </button>
           </div>
 

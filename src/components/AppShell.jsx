@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import {
   ShoppingCart, LayoutDashboard, Package, ReceiptText,
   Users, Settings, LogOut, Wifi, WifiOff, Menu, X, ChevronRight,
-  RefreshCw, CreditCard, MoreHorizontal, ChevronUp
+  RefreshCw, CreditCard, MoreHorizontal, ChevronUp, Truck, Receipt, ClipboardList
 } from 'lucide-react'
 import { useSession } from '../context/SessionContext'
 import { getSetting } from '../lib/db'
@@ -15,6 +15,9 @@ const NAV = [
   { id: 'sales',        icon: ReceiptText,     label: 'Sales & Reports', short: 'Sales',     roles: ['admin','manager','cashier'] },
   { id: 'customers',    icon: Users,           label: 'Customers',       short: 'Customers', roles: ['admin','manager','cashier'] },
   { id: 'changeCredit', icon: CreditCard,      label: 'Change & Credit', short: 'Credit',    roles: ['admin','manager','cashier'] },
+  { id: 'suppliers',    icon: Truck,           label: 'Suppliers',       short: 'Suppliers', roles: ['admin','manager'] },
+  { id: 'purchasing',   icon: ClipboardList,   label: 'Purchase Orders', short: 'Orders',    roles: ['admin','manager'] },
+  { id: 'expenses',     icon: Receipt,         label: 'Expenses',        short: 'Expenses',  roles: ['admin','manager'] },
   { id: 'sync',         icon: RefreshCw,       label: 'Sync',            short: 'Sync',      roles: ['admin','manager'] },
   { id: 'settings',     icon: Settings,        label: 'Settings',        short: 'Settings',  roles: ['admin'] },
 ]

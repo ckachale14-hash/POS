@@ -4,7 +4,8 @@ import {
   Send, Printer, CheckCircle2, Package, AlertCircle, Edit3,
   ArrowLeft, CreditCard, Banknote, Smartphone, FileCheck, Eye,
   Plus, Minus, Trash2, ChevronDown, Receipt as ReceiptIcon,
-  RotateCcw, AlertTriangle, Check, DollarSign, Box, Layers, UserCheck
+  RotateCcw, AlertTriangle, Check, DollarSign, Box, Layers, UserCheck,
+  ScanLine,
 } from 'lucide-react'
 import {
   db, saveSale, saveQuote, holdSale, removeHeldSale,
@@ -15,6 +16,7 @@ import { CATEGORIES, SHOP_INFO } from '../data/initial-inventory'
 import { useSession } from '../context/SessionContext'
 import Receipt from '../components/Receipt.jsx'
 import PinDialog from '../components/PinDialog.jsx'
+import { useBarcodeScanner } from '../lib/useBarcode'
 
 const DISCOUNT_THRESHOLD = 5
 
@@ -199,12 +201,51 @@ export default function POS({ user, online, navigate }) {
   const [changeActuallyGiven, setChangeActuallyGiven] = useState('')
   const [holdPartialChange, setHoldPartialChange] = useState(false)
 
-  const searchRef = useRef(null)
+  const searchRef  = useRef(null)
+  const [lastScan, setLastScan] = useState('')    // brief scan indicator text
 
   const showToast = useCallback((msg, type = 'info') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 2600)
   }, [])
+
+  // ── Barcode scanner ─────────────────────────────────────────────────────
+  // The Sunmi V1s-G hardware scan button emits the barcode as keystrokes
+  // ending with Enter. useBarcodeScanner detects the burst and fires here.
+  const handleScan = useCallback((code) => {
+    // Ignore scans while any modal is blocking the POS view
+    if (priceModal || checkoutModal || lineDiscountModal || showSaleDiscount || holdNameModal) return
+
+    // Look up by exact SKU (case-insensitive)
+    const match = products.find(p => p.active && p.sku && p.sku.toLowerCase() === code.toLowerCase())
+    if (match) {
+      handleProductPress(match)
+      // Flash the search box to confirm what was scanned, then clear
+      setLastScan(code)
+      if (searchRef.current) searchRef.current.value = code
+      setTimeout(() => {
+        setLastScan('')
+        if (searchRef.current) searchRef.current.value = ''
+        handleSearchChange('')
+      }, 900)
+      return
+    }
+
+    // No exact SKU match — fill search so the cashier sees what was scanned
+    handleSearchChange(code)
+    if (searchRef.current) searchRef.current.value = code
+    showToast(`No product for SKU: ${code}`, 'warning')
+    if (navigator.vibrate) navigator.vibrate([80, 40, 80])
+  }, [
+    priceModal, checkoutModal, lineDiscountModal, showSaleDiscount, holdNameModal,
+    products, showToast,
+    // handleProductPress and handleSearchChange are defined below — the callback
+    // ref inside useBarcodeScanner always calls the latest version so deps on
+    // them is optional here; listing them makes the linter happy.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ])
+
+  useBarcodeScanner(handleScan)
 
   useEffect(() => {
     ;(async () => {
@@ -470,10 +511,13 @@ export default function POS({ user, online, navigate }) {
         <div className={`flex flex-col ${view === 'cart' ? 'hidden md:flex' : 'flex'} flex-1 overflow-hidden min-w-0`}>
           <div className="px-3 py-2 bg-white border-b border-gray-100 shrink-0">
             <div className="search-input-wrap">
-              <Search className="search-icon" size={13} />
+              {lastScan
+                ? <ScanLine className="search-icon text-emerald-500" size={13} />
+                : <Search className="search-icon" size={13} />}
               <input ref={searchRef} defaultValue={search} onChange={e => handleSearchChange(e.target.value)}
-                placeholder="Search name or SKU…" className="input py-2 text-xs" style={{paddingRight: search ? '2rem' : undefined}} />
-              {search && <button onClick={() => handleSearchChange('')} className="absolute right-3 top-1/2 -translate-y-1/2" style={{color:'var(--ink-tertiary)'}}><X size={13} /></button>}
+                placeholder="Search or scan SKU…" className={`input py-2 text-xs transition-colors ${lastScan ? 'border-emerald-400 bg-emerald-50/60' : ''}`}
+                style={{paddingRight: search ? '2rem' : undefined}} />
+              {search && <button onClick={() => { handleSearchChange(''); setLastScan('') }} className="absolute right-3 top-1/2 -translate-y-1/2" style={{color:'var(--ink-tertiary)'}}><X size={13} /></button>}
             </div>
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar mt-2 pb-0.5">
               {categories.map(cat => (
