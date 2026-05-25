@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   Search, Plus, Edit2, Trash2, Package, AlertTriangle, Download, Upload,
-  X, ChevronDown, Filter, Box, Layers, RefreshCw, Check, Tag, ScanLine, History,
+  X, ChevronDown, Filter, Box, Layers, RefreshCw, Check, Tag, ScanLine, History, Send, List,
 } from 'lucide-react'
 import { db, logAudit, getTotalUnits, autoConvert, getSetting, saveSetting, setSetting } from '../lib/db'
 import { fmt } from '../lib/utils'
@@ -71,6 +71,7 @@ export default function Inventory({ user }) {
   const [newCatInput, setNewCatInput]         = useState('')
   const [historyModal, setHistoryModal]       = useState(null) // product object
   const [historyRows, setHistoryRows]         = useState([])
+  const [wholesaleModal, setWholesaleModal]   = useState(false)
 
   const searchRef = useRef(null)
 
@@ -294,6 +295,9 @@ export default function Inventory({ user }) {
           <div className="flex gap-2">
             <button onClick={exportCSV} className="btn-secondary py-2 px-3 text-xs gap-1.5">
               <Download size={13} />Export
+            </button>
+            <button onClick={() => setWholesaleModal(true)} className="btn-secondary py-2 px-3 text-xs gap-1.5">
+              <List size={13} />Wholesale List
             </button>
             {!readOnly && (
               <>
@@ -786,11 +790,115 @@ export default function Inventory({ user }) {
         </div>
       )}
 
+      {/* ── Wholesale price list modal ── */}
+      {wholesaleModal && (
+        <WholesaleModal products={products} onClose={() => setWholesaleModal(false)} />
+      )}
+
       {toast && (
         <div className={`toast ${toast.type === 'success' ? 'toast-success' : toast.type === 'error' ? 'toast-error' : 'toast-info'}`}>
           {toast.msg}
         </div>
       )}
+    </div>
+  )
+}
+
+function WholesaleModal({ products, onClose }) {
+  const [shopInfo, setShopInfo] = useState({})
+
+  useEffect(() => {
+    ;(async () => {
+      const sn = await getSetting('shop_name')
+      const sp = await getSetting('shop_phones')
+      setShopInfo({ name: sn, phones: sp?.split(',') || [] })
+    })()
+  }, [])
+
+  const boxItems = products.filter(p => p.active && p.boxSize > 1 && p.boxPrice > 0)
+  const wsItems  = products.filter(p => p.active && p.wholesalePrice > 0)
+
+  const buildText = () => {
+    const lines = []
+    lines.push(`*${shopInfo.name || 'PortionSpot'} — Wholesale Price List*`)
+    const phoneList = Array.isArray(shopInfo.phones)
+      ? shopInfo.phones.filter(Boolean).join(' / ')
+      : ''
+    if (phoneList) lines.push(phoneList)
+    lines.push(`_Updated: ${new Date().toLocaleDateString('en-GB')}_`)
+    lines.push('')
+
+    if (boxItems.length > 0) {
+      lines.push('*Box / Set Prices:*')
+      boxItems.forEach(p => {
+        lines.push(`  ${p.name} (x${p.boxSize}) — $${parseFloat(p.boxPrice).toFixed(2)}`)
+      })
+      lines.push('')
+    }
+
+    if (wsItems.length > 0) {
+      lines.push('*Wholesale (per unit):*')
+      wsItems.forEach(p => {
+        lines.push(`  ${p.name} — $${parseFloat(p.wholesalePrice).toFixed(2)}`)
+      })
+    }
+
+    return lines.join('\n').trim()
+  }
+
+  const handleWhatsApp = () => {
+    const text = buildText()
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  const handlePdf = () => {
+    const rows = [
+      ...boxItems.map(p => `<tr><td>${p.name}</td><td>x${p.boxSize} box</td><td style="text-align:right">$${parseFloat(p.boxPrice).toFixed(2)}</td></tr>`),
+      ...wsItems.map(p => `<tr><td>${p.name}</td><td>per unit</td><td style="text-align:right">$${parseFloat(p.wholesalePrice).toFixed(2)}</td></tr>`),
+    ].join('')
+    const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Wholesale Price List</title>
+<style>body{font-family:sans-serif;padding:20px;max-width:600px}h2{margin-bottom:4px}p{color:#666;font-size:13px;margin-bottom:16px}
+table{width:100%;border-collapse:collapse}th{text-align:left;border-bottom:2px solid #000;padding:6px}
+td{padding:5px 6px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f9f9f9}
+@media print{@page{margin:10mm}}</style></head><body>
+<h2>${shopInfo.name || 'PortionSpot'} — Wholesale Price List</h2>
+<p>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+<table><thead><tr><th>Product</th><th>Unit</th><th style="text-align:right">Price</th></tr></thead>
+<tbody>${rows}</tbody></table>
+<script>window.onload=function(){window.print()}<\/script></body></html>`
+    const url = URL.createObjectURL(new Blob([doc], { type: 'text/html' }))
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
+
+  const text = buildText()
+
+  return (
+    <div className="modal-overlay animate-fade-in" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 shrink-0">
+          <div>
+            <p className="font-bold text-gray-900 text-sm">Wholesale Price List</p>
+            <p className="text-xs text-gray-400">{boxItems.length + wsItems.length} item(s)</p>
+          </div>
+          <button onClick={onClose}><X size={17} className="text-gray-400" /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 rounded-xl p-3 leading-relaxed">
+            {text || 'No items with box or wholesale pricing found.\nAdd box prices or wholesale prices in Inventory.'}
+          </pre>
+        </div>
+
+        <div className="px-4 py-3 border-t border-gray-100 flex gap-2 shrink-0">
+          <button onClick={handlePdf} className="btn-secondary flex-1 gap-2">
+            <Download size={14} />PDF
+          </button>
+          <button onClick={handleWhatsApp} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition active:scale-95">
+            <Send size={14} />WhatsApp
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
