@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Shares files from getCacheDir() — used by the RawBT intent print bridge -->
+    <cache-path name="receipts" path="." />
+</paths>

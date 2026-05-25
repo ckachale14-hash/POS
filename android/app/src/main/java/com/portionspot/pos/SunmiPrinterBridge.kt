@@ -1,12 +1,19 @@
 package com.portionspot.pos
 
+import android.content.Context
+import android.content.Intent
+import android.util.Base64
+import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
+import androidx.core.content.FileProvider
 import org.json.JSONArray
+import java.io.File
 import java.lang.ref.WeakReference
 import woyou.aidlservice.jiuiv5.IWoyouService
 
 class SunmiPrinterBridge(
+    private val context:         Context,
     private val getService:      () -> IWoyouService?,
     private val openDiagnostics: () -> Unit,
     private val getOnline:       () -> Boolean,
@@ -40,6 +47,51 @@ class SunmiPrinterBridge(
     fun cutPaper(mode: Int) {
         try { getService()?.autoOutPaper(mode, null) }
         catch (_: Exception) { getService()?.cutPaper(null) }
+    }
+
+    // ── RawBT intent bridge ──────────────────────────────────────────────────
+    /**
+     * Decodes a base64 ESC/POS byte string, writes it to a cache file, and
+     * fires an intent to RawBT's PrintContentActivity via FileProvider.
+     * RawBT handles driver selection and hardware communication internally —
+     * this is the most reliable print path on Sunmi hardware.
+     *
+     * Called from JS as: window.SunmiPrinter.rawBtPrint(base64String)
+     */
+    @JavascriptInterface
+    fun printViaRawBt(base64EscPos: String) {
+        try {
+            val bytes = Base64.decode(base64EscPos, Base64.DEFAULT)
+            val file  = File(context.cacheDir, "receipt.prn")
+            file.writeBytes(bytes)
+
+            val uri = FileProvider.getUriForFile(
+                context,
+                "com.portionspot.pos.fileprovider",
+                file
+            )
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/octet-stream")
+                setPackage("ru.a402d.rawbtprinter")
+                addFlags(
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+                )
+            }
+            context.startActivity(intent)
+            Log.d("PSPrinter", "RawBT intent sent — ${bytes.size} bytes → ${uri}")
+        } catch (e: Exception) {
+            Log.e("PSPrinter", "RawBT print failed: ${e.message}", e)
+            // Surface the error back to JS so the UI can show a toast
+            val wv = webViewRef.get() ?: return
+            val msg = e.message?.replace("'", "\\'") ?: "unknown error"
+            wv.post {
+                wv.evaluateJavascript(
+                    "window.__rawBtError && window.__rawBtError('$msg')", null
+                )
+            }
+        }
     }
 
     // ── Bluetooth bridge ─────────────────────────────────────────────────────

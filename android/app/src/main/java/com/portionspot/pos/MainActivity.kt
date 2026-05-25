@@ -75,6 +75,10 @@ class MainActivity : AppCompatActivity() {
     },
     lineWrap:  function (n) { return Promise.resolve(_SunmiNative.lineWrap(n)); },
     cutPaper:  function (m) { return Promise.resolve(_SunmiNative.cutPaper(m||1)); },
+    // RawBT intent bridge — writes ESC/POS bytes to a cache file and fires
+    // an Android Intent to RawBT's PrintContentActivity. This is the most
+    // reliable print path on Sunmi hardware. Pass base64-encoded ESC/POS bytes.
+    rawBtPrint: function (b64) { _SunmiNative.printViaRawBt(b64); },
   };
 
   /* ── Classic Bluetooth — async to avoid freezing JS ──────── */
@@ -214,6 +218,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val bridge = SunmiPrinterBridge(
+            context         = applicationContext,
             getService      = { app.printerService },
             openDiagnostics = { openDiagnostics() },
             getOnline       = { isOnline },

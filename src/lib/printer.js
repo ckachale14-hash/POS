@@ -358,6 +358,29 @@ async function printViaBluetooth(record, shop, settings, paperWidth) {
   await device.gatt.disconnect()
 }
 
+// ── RawBT intent bridge (Android WebView APK only) ────────────────────────
+// Used when running inside our custom APK on Sunmi hardware.
+// The native SunmiPrinterBridge.printViaRawBt() method:
+//   1. Decodes the base64 ESC/POS bytes
+//   2. Writes them to cacheDir/receipt.prn
+//   3. Fires an Intent(ACTION_VIEW) targeting RawBT's PrintContentActivity
+//      via a FileProvider content:// URI
+// RawBT handles driver selection and hardware communication internally —
+// this bypasses the broken direct-AIDL path and uses RawBT's proven drivers.
+async function printViaRawBtIntent(record, shop, settings, paperWidth) {
+  const api = window.SunmiPrinter
+  if (typeof api?.rawBtPrint !== 'function') {
+    throw new Error('RawBT intent bridge not available (rawBtPrint not injected)')
+  }
+  const data = buildEscPos(record, shop, settings, paperWidth)
+  // btoa only handles latin1 — use fromCharCode trick for arbitrary byte values
+  let binary = ''
+  for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i])
+  api.rawBtPrint(btoa(binary))
+  // Intent is fire-and-forget; give RawBT a moment to receive and queue the job
+  await new Promise(r => setTimeout(r, 300))
+}
+
 // ── RawBT local print bridge (Android app) ────────────────────────────────
 // RawBT runs a local HTTP server on the device (port 7584).
 // Install from Google Play, open it, enable HTTP API, select the built-in printer.
@@ -606,13 +629,28 @@ export async function printReceipt(record, shop, settings, htmlContent) {
   if (printerType === 'sunmi') {
     // JSAPI only works inside a native WebView, not Chrome.
     if (hasSunmiJSAPI()) {
+      // ── Path 0: RawBT intent bridge (APK only) ──────────────────────────
+      // When running inside our custom APK the bridge injects rawBtPrint(),
+      // which writes ESC/POS bytes to a cache file and fires an Android Intent
+      // to RawBT's PrintContentActivity. This is the most reliable path on
+      // Sunmi hardware because RawBT uses its own proven AIDL drivers internally.
+      if (typeof window.SunmiPrinter?.rawBtPrint === 'function') {
+        try {
+          await printViaRawBtIntent(record, shop, settings, paperWidth)
+          return { ok: true, method: 'rawbt-intent' }
+        } catch (intentErr) {
+          // RawBT not installed or intent failed — fall through to direct AIDL
+          console.warn('[Printer] RawBT intent failed:', intentErr.message, '— trying direct AIDL')
+        }
+      }
+
+      // ── Path 1: Direct AIDL (fallback if RawBT not installed) ───────────
       try {
         await printViaSunmiJSAPI(record, shop, settings)
         return { ok: true, method: 'sunmi-jsapi' }
       } catch (jsapiErr) {
         // AIDL threw (binder died, DeadObjectException, etc.) — try RawBT
-        // automatically before giving up. RawBT HTTP server runs on the same
-        // device; address configured in Settings → Printer → Server for RawBT.
+        // HTTP server as last resort before giving up.
         try {
           await printViaRawBT(record, shop, settings, paperWidth)
           return { ok: true, method: 'rawbt-fallback' }
@@ -620,7 +658,7 @@ export async function printReceipt(record, shop, settings, htmlContent) {
           // RawBT also not reachable — surface the original AIDL error
           throw new Error(
             `Sunmi printer error: ${jsapiErr.message}. ` +
-            `RawBT fallback also failed — is RawBT running and HTTP API enabled?`
+            `Install RawBT from the Play Store and open it once to enable printing.`
           )
         }
       }

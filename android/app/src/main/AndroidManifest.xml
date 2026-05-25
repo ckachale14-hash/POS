@@ -8,6 +8,9 @@
     <!-- Sunmi printer service -->
     <uses-permission android:name="com.sunmi.permission.PRINTER" />
 
+    <!-- RawBT print middleware — required to bind its service and fire intents -->
+    <uses-permission android:name="ru.a402d.rawbtprinter.PERMISSION" />
+
     <!-- Bluetooth — legacy (pre-API 31) -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <!-- Bluetooth — Android 12+ -->
@@ -21,6 +24,8 @@
         <package android:name="com.sunmi.innerprinter" />
         <package android:name="com.sunmi.printerservice" />
         <package android:name="com.sunmi.extprinterservice" />
+        <!-- RawBT print middleware -->
+        <package android:name="ru.a402d.rawbtprinter" />
     </queries>
 
     <application
@@ -47,6 +52,17 @@
             android:exported="false"
             android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
             android:label="Diagnostics" />
+
+        <!-- FileProvider for sharing receipt files with RawBT via content:// URIs -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.portionspot.pos.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
     </application>
 
