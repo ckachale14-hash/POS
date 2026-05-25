@@ -28,7 +28,13 @@ export default function Receipt({ record, shop, onSendWhatsApp, onClose, readOnl
       s.show_website = await getSetting('receipt_show_website', true)
       s.footer_text  = await getSetting('receipt_footer_text', 'Thank you for shopping with us!\nGoods sold are not returnable.')
       s.same_template  = await getSetting('receipt_same_template', true)
-      s.font_size      = await getSetting('receipt_font_size', 'small')
+      // Migrate from old font_size string if new keys not yet saved
+      const oldSize = await getSetting('receipt_font_size', 'small')
+      const defaultW = oldSize === 'large' ? 2 : 1
+      const defaultH = oldSize === 'large' ? 2 : oldSize === 'medium' ? 2 : 1
+      s.char_w         = await getSetting('receipt_char_w', defaultW)
+      s.char_h         = await getSetting('receipt_char_h', defaultH)
+      s.feed_lines     = await getSetting('receipt_feed_lines', 1)
       s.bold_headers   = await getSetting('receipt_bold_headers', true)
       s.bold_totals    = await getSetting('receipt_bold_totals', true)
       setSettings(s)

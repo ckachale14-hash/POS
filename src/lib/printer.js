@@ -75,11 +75,17 @@ function fmt(n) {
 // logoBytes: optional Uint8Array of pre-computed ESC/POS GS v 0 bitmap data
 //            (produced by logoDataUrlToEscPos). Pass null to omit the logo.
 export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', logoBytes = null) {
-  // Font size: 'large' doubles width+height so W halves; 'medium' is taller only (same W)
-  const fontSize = settings.font_size || 'small'
-  const W = fontSize === 'large'
-    ? (paperWidth === '80mm' ? 24 : 16)
-    : (paperWidth === '80mm' ? 48 : 32)
+  // Character size: width/height multipliers 1-4
+  // Migrate from old font_size string if new keys absent
+  const oldSize = settings.font_size || 'small'
+  const defaultW = oldSize === 'large' ? 2 : 1
+  const defaultH = (oldSize === 'large' || oldSize === 'medium') ? 2 : 1
+  const charW = Math.max(1, Math.min(4, settings.char_w || defaultW))
+  const charH = Math.max(1, Math.min(4, settings.char_h || defaultH))
+  const feedLines = Math.max(0, Math.min(8, settings.feed_lines ?? 1))
+  // GS ! n: bits 4-6 = width-1, bits 0-2 = height-1
+  const sizeN = ((charW - 1) << 4) | (charH - 1)
+  const W = Math.floor((paperWidth === '80mm' ? 48 : 32) / charW)
   const boldHeaders = settings.bold_headers !== false
   const boldTotals  = settings.bold_totals  !== false
   const isQuote = record.type === 'quote'
@@ -98,8 +104,7 @@ export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', lo
   // Init — reset printer, then apply the user-configured character size.
   cmd(CMD.INIT)
   cmd(CMD.CHAR_NORMAL)
-  if (fontSize === 'large')  cmd(CMD.SIZE_LARGE)
-  else if (fontSize === 'medium') cmd(CMD.SIZE_MEDIUM)
+  if (sizeN !== 0) cmd([GS, 0x21, sizeN])
 
   // Logo (optional — pre-computed GS v 0 bitmap bytes)
   if (logoBytes && logoBytes.length > 0) {
@@ -197,8 +202,8 @@ export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', lo
     cmd(CMD.ALIGN_LEFT)
   }
 
-  // Feed + cut
-  cmd(CMD.FEED_3)
+  // Feed configurable lines, then cut
+  if (feedLines > 0) cmd([ESC, 0x64, feedLines])
   cmd(CMD.CUT)
 
   // Merge all chunks into one Uint8Array

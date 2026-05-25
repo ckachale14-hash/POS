@@ -221,7 +221,10 @@ function ReceiptTab({ showToast }) {
   const [waSettings, setWaSettings]       = useState({})
   const [footerText, setFooterText]       = useState('Thank you for shopping with us!\nGoods sold are not returnable.')
   const [waFooterText, setWaFooterText]   = useState('')
-  const [fontSize, setFontSize]           = useState('small')
+  const [charW, setCharW]                 = useState(1)
+  const [charH, setCharH]                 = useState(1)
+  const [feedLines, setFeedLines]         = useState(1)
+  const [showCustomSize, setShowCustomSize] = useState(false)
   const [boldHeaders, setBoldHeaders]     = useState(true)
   const [boldTotals, setBoldTotals]       = useState(true)
 
@@ -248,7 +251,13 @@ function ReceiptTab({ showToast }) {
       setWaSettings(ws)
       setFooterText(await getSetting('receipt_footer_text', 'Thank you for shopping with us!\nGoods sold are not returnable.'))
       setWaFooterText(await getSetting('whatsapp_footer_text', ''))
-      setFontSize(await getSetting('receipt_font_size', 'small'))
+      // Migrate from old 'receipt_font_size' string setting if new keys not yet saved
+      const oldSize = await getSetting('receipt_font_size', 'small')
+      const defaultW = oldSize === 'large' ? 2 : 1
+      const defaultH = oldSize === 'large' ? 2 : oldSize === 'medium' ? 2 : 1
+      setCharW(await getSetting('receipt_char_w', defaultW))
+      setCharH(await getSetting('receipt_char_h', defaultH))
+      setFeedLines(await getSetting('receipt_feed_lines', 1))
       setBoldHeaders(await getSetting('receipt_bold_headers', true))
       setBoldTotals(await getSetting('receipt_bold_totals', true))
     })()
@@ -257,7 +266,9 @@ function ReceiptTab({ showToast }) {
   const save = async () => {
     await setSetting('receipt_same_template', sameTemplate)
     await setSetting('receipt_footer_text', footerText)
-    await setSetting('receipt_font_size', fontSize)
+    await setSetting('receipt_char_w', charW)
+    await setSetting('receipt_char_h', charH)
+    await setSetting('receipt_feed_lines', feedLines)
     await setSetting('receipt_bold_headers', boldHeaders)
     await setSetting('receipt_bold_totals', boldTotals)
     for (const [k, v] of Object.entries(printSettings)) await setSetting(`receipt_${k}`, v)
@@ -268,29 +279,70 @@ function ReceiptTab({ showToast }) {
     showToast('Receipt settings saved')
   }
 
-  const FontBtn = ({ id, label, desc }) => (
+  const activePreset = charW === 1 && charH === 1 ? 'small'
+                     : charW === 1 && charH === 2 ? 'medium'
+                     : charW === 2 && charH === 2 ? 'large' : 'custom'
+
+  const PresetBtn = ({ id, label, desc, w, h }) => (
     <button
-      onClick={() => setFontSize(id)}
-      className={`flex-1 py-2 px-3 rounded-xl border text-sm font-semibold transition ${
-        fontSize === id
+      onClick={() => { setCharW(w); setCharH(h); setShowCustomSize(false) }}
+      className={`flex-1 py-2 px-1 rounded-xl border text-xs font-semibold transition ${
+        activePreset === id && !showCustomSize
           ? 'bg-brand-600 text-white border-brand-600'
           : 'bg-white text-gray-700 border-gray-200 hover:border-brand-300'
       }`}
     >
       <div>{label}</div>
-      <div className="text-[10px] font-normal opacity-70">{desc}</div>
+      <div className="font-normal opacity-60" style={{ fontSize: 9 }}>{desc}</div>
     </button>
   )
 
   return (
     <>
       <Section title="Print Layout" desc="Controls how the ESC/POS receipt is formatted on the thermal printer.">
-        <Field label="Font Size" hint="Small fits more text per line on 58mm paper. Large is easier to read but uses more paper.">
-          <div className="flex gap-2">
-            <FontBtn id="small"  label="Small"  desc="32 chars/line" />
-            <FontBtn id="medium" label="Medium" desc="32 chars, taller" />
-            <FontBtn id="large"  label="Large"  desc="16 chars/line" />
+        <Field label="Font Size" hint="Width and height multiply the base character size. 1×1 = normal. 2×2 = double.">
+          <div className="flex gap-1.5 mb-2">
+            <PresetBtn id="small"  label="Small"  desc="1×1" w={1} h={1} />
+            <PresetBtn id="medium" label="Medium" desc="1×2 tall" w={1} h={2} />
+            <PresetBtn id="large"  label="Large"  desc="2×2" w={2} h={2} />
+            <button
+              onClick={() => setShowCustomSize(true)}
+              className={`flex-1 py-2 px-1 rounded-xl border text-xs font-semibold transition ${
+                showCustomSize || activePreset === 'custom'
+                  ? 'bg-brand-600 text-white border-brand-600'
+                  : 'bg-white text-gray-700 border-gray-200 hover:border-brand-300'
+              }`}
+            >
+              Custom
+            </button>
           </div>
+          {(showCustomSize || activePreset === 'custom') && (
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <div>
+                <label className="text-[10px] text-gray-500 font-medium mb-1 block">Width ×</label>
+                <input
+                  type="number" min="1" max="4" value={charW}
+                  onChange={e => setCharW(Math.min(4, Math.max(1, parseInt(e.target.value) || 1)))}
+                  className="input text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-gray-500 font-medium mb-1 block">Height ×</label>
+                <input
+                  type="number" min="1" max="4" value={charH}
+                  onChange={e => setCharH(Math.min(4, Math.max(1, parseInt(e.target.value) || 1)))}
+                  className="input text-sm"
+                />
+              </div>
+            </div>
+          )}
+        </Field>
+        <Field label="Feed lines after print" hint="Blank lines of paper below the last line before cutting (0 = no extra space, 4 = more space to tear).">
+          <input
+            type="number" min="0" max="8" value={feedLines}
+            onChange={e => setFeedLines(Math.min(8, Math.max(0, parseInt(e.target.value) || 0)))}
+            className="input text-sm"
+          />
         </Field>
         <Toggle value={boldHeaders} onChange={setBoldHeaders} label="Bold item names" />
         <Toggle value={boldTotals}  onChange={setBoldTotals}  label="Bold TOTAL line" />
