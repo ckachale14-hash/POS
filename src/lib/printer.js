@@ -609,8 +609,20 @@ export async function printReceipt(record, shop, settings, htmlContent) {
       try {
         await printViaSunmiJSAPI(record, shop, settings)
         return { ok: true, method: 'sunmi-jsapi' }
-      } catch (e) {
-        throw new Error(`Sunmi printer error: ${e.message}`)
+      } catch (jsapiErr) {
+        // AIDL threw (binder died, DeadObjectException, etc.) — try RawBT
+        // automatically before giving up. RawBT HTTP server runs on the same
+        // device; address configured in Settings → Printer → Server for RawBT.
+        try {
+          await printViaRawBT(record, shop, settings, paperWidth)
+          return { ok: true, method: 'rawbt-fallback' }
+        } catch {
+          // RawBT also not reachable — surface the original AIDL error
+          throw new Error(
+            `Sunmi printer error: ${jsapiErr.message}. ` +
+            `RawBT fallback also failed — is RawBT running and HTTP API enabled?`
+          )
+        }
       }
     }
     // No JSAPI — determine context so we use the right path.

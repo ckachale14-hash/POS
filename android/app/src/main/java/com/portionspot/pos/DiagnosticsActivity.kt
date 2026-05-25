@@ -73,10 +73,29 @@ class DiagnosticsActivity : AppCompatActivity() {
                 button("Test Print") { testPrint() },
             )
             addRow(
-                button("Feed Paper") { printer?.lineWrap(4, null) },
+                button("Feed Paper") {
+                    val svc = printer ?: run { toast("Not connected"); return@button }
+                    try {
+                        svc.printerInit(null)          // must init before feed
+                        svc.lineWrap(8, null)
+                    } catch (e: Exception) { toast("Feed error: ${e.message}") }
+                },
                 button("Cut Paper")  {
                     try { printer?.autoOutPaper(1, null) }
                     catch (_: Exception) { printer?.cutPaper(null) }
+                },
+            )
+            addRow(
+                button("Text Test") {
+                    val svc = printer ?: run { toast("Not connected"); return@button }
+                    try {
+                        svc.printerInit(null)
+                        svc.setAlignment(1, null)
+                        svc.printText("** AIDL TEXT TEST OK **\n", null)
+                        svc.setAlignment(0, null)
+                        svc.lineWrap(6, null)
+                        toast("Text sent — check paper")
+                    } catch (e: Exception) { toast("Text test error: ${e.message}") }
                 },
             )
         }
