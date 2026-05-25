@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import {
   ShoppingCart, LayoutDashboard, Package, ReceiptText,
   Users, Settings, LogOut, Wifi, WifiOff, Menu, X, ChevronRight,
-  RefreshCw, CreditCard, MoreHorizontal, ChevronUp, Truck, Receipt, ClipboardList
+  RefreshCw, CreditCard, MoreHorizontal, ChevronUp, Truck, Receipt, ClipboardList, History
 } from 'lucide-react'
 import { useSession } from '../context/SessionContext'
 import { getSetting } from '../lib/db'
@@ -13,6 +13,7 @@ const NAV = [
   { id: 'dashboard',    icon: LayoutDashboard, label: 'Dashboard',       short: 'Dashboard', roles: ['admin','manager','cashier'] },
   { id: 'inventory',    icon: Package,         label: 'Inventory',       short: 'Inventory', roles: ['admin','manager','cashier'] },
   { id: 'sales',        icon: ReceiptText,     label: 'Sales & Reports', short: 'Sales',     roles: ['admin','manager','cashier'] },
+  { id: 'receipts',     icon: History,         label: 'Receipts',        short: 'Receipts',  roles: ['admin','manager','cashier'] },
   { id: 'customers',    icon: Users,           label: 'Customers',       short: 'Customers', roles: ['admin','manager','cashier'] },
   { id: 'changeCredit', icon: CreditCard,      label: 'Change & Credit', short: 'Credit',    roles: ['admin','manager','cashier'] },
   { id: 'suppliers',    icon: Truck,           label: 'Suppliers',       short: 'Suppliers', roles: ['admin','manager'] },

@@ -221,6 +221,9 @@ function ReceiptTab({ showToast }) {
   const [waSettings, setWaSettings]       = useState({})
   const [footerText, setFooterText]       = useState('Thank you for shopping with us!\nGoods sold are not returnable.')
   const [waFooterText, setWaFooterText]   = useState('')
+  const [fontSize, setFontSize]           = useState('small')
+  const [boldHeaders, setBoldHeaders]     = useState(true)
+  const [boldTotals, setBoldTotals]       = useState(true)
 
   const SECTIONS = [
     { key: 'show_logo',     label: 'Show Logo' },
@@ -245,12 +248,18 @@ function ReceiptTab({ showToast }) {
       setWaSettings(ws)
       setFooterText(await getSetting('receipt_footer_text', 'Thank you for shopping with us!\nGoods sold are not returnable.'))
       setWaFooterText(await getSetting('whatsapp_footer_text', ''))
+      setFontSize(await getSetting('receipt_font_size', 'small'))
+      setBoldHeaders(await getSetting('receipt_bold_headers', true))
+      setBoldTotals(await getSetting('receipt_bold_totals', true))
     })()
   }, [])
 
   const save = async () => {
     await setSetting('receipt_same_template', sameTemplate)
     await setSetting('receipt_footer_text', footerText)
+    await setSetting('receipt_font_size', fontSize)
+    await setSetting('receipt_bold_headers', boldHeaders)
+    await setSetting('receipt_bold_totals', boldTotals)
     for (const [k, v] of Object.entries(printSettings)) await setSetting(`receipt_${k}`, v)
     if (!sameTemplate) {
       for (const [k, v] of Object.entries(waSettings)) await setSetting(`whatsapp_${k}`, v)
@@ -259,8 +268,34 @@ function ReceiptTab({ showToast }) {
     showToast('Receipt settings saved')
   }
 
+  const FontBtn = ({ id, label, desc }) => (
+    <button
+      onClick={() => setFontSize(id)}
+      className={`flex-1 py-2 px-3 rounded-xl border text-sm font-semibold transition ${
+        fontSize === id
+          ? 'bg-brand-600 text-white border-brand-600'
+          : 'bg-white text-gray-700 border-gray-200 hover:border-brand-300'
+      }`}
+    >
+      <div>{label}</div>
+      <div className="text-[10px] font-normal opacity-70">{desc}</div>
+    </button>
+  )
+
   return (
     <>
+      <Section title="Print Layout" desc="Controls how the ESC/POS receipt is formatted on the thermal printer.">
+        <Field label="Font Size" hint="Small fits more text per line on 58mm paper. Large is easier to read but uses more paper.">
+          <div className="flex gap-2">
+            <FontBtn id="small"  label="Small"  desc="32 chars/line" />
+            <FontBtn id="medium" label="Medium" desc="32 chars, taller" />
+            <FontBtn id="large"  label="Large"  desc="16 chars/line" />
+          </div>
+        </Field>
+        <Toggle value={boldHeaders} onChange={setBoldHeaders} label="Bold item names" />
+        <Toggle value={boldTotals}  onChange={setBoldTotals}  label="Bold TOTAL line" />
+      </Section>
+
       <Section title="Template Mode">
         <Toggle
           value={sameTemplate}

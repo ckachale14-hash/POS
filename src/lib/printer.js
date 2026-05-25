@@ -17,6 +17,8 @@ const CMD = {
   INIT:          [ESC, 0x40],
   CHAR_NORMAL:   [ESC, 0x21, 0x00],  // ESC ! 0 — reset char mode (normal size, no underline, no bold)
   SIZE_NORMAL:   [GS,  0x21, 0x00],  // GS ! 0 — reset char size to 1×1
+  SIZE_MEDIUM:   [GS,  0x21, 0x01],  // GS ! 1 — 1× width, 2× height
+  SIZE_LARGE:    [GS,  0x21, 0x11],  // GS ! 0x11 — 2× width + height
   ALIGN_LEFT:    [ESC, 0x61, 0x00],
   ALIGN_CENTER:  [ESC, 0x61, 0x01],
   ALIGN_RIGHT:   [ESC, 0x61, 0x02],
@@ -26,8 +28,8 @@ const CMD = {
   // on Sunmi V1s-G when rendered via RawBT.
   DOUBLE_ON:     [GS,  0x21, 0x11],  // 2× width + height (unused)
   DOUBLE_OFF:    [GS,  0x21, 0x00],  // back to 1×1
-  CUT:           [GS,  0x56, 0x41, 0x10],
-  FEED_3:        [ESC, 0x64, 0x03],
+  CUT:           [GS,  0x56, 0x41, 0x00],  // GS V A 0 — cut without pre-feeding
+  FEED_3:        [ESC, 0x64, 0x02],        // feed 2 lines (was 3)
   LF:            [0x0a],
 }
 
@@ -73,7 +75,13 @@ function fmt(n) {
 // logoBytes: optional Uint8Array of pre-computed ESC/POS GS v 0 bitmap data
 //            (produced by logoDataUrlToEscPos). Pass null to omit the logo.
 export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', logoBytes = null) {
-  const W = paperWidth === '80mm' ? 48 : 32
+  // Font size: 'large' doubles width+height so W halves; 'medium' is taller only (same W)
+  const fontSize = settings.font_size || 'small'
+  const W = fontSize === 'large'
+    ? (paperWidth === '80mm' ? 24 : 16)
+    : (paperWidth === '80mm' ? 48 : 32)
+  const boldHeaders = settings.bold_headers !== false
+  const boldTotals  = settings.bold_totals  !== false
   const isQuote = record.type === 'quote'
   const payments = record.payments?.length > 0
     ? record.payments
@@ -87,10 +95,11 @@ export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', lo
   const line = (str = '') => push(textBytes(str + '\n'))
   const cmd = (...c) => push(bytes(...c))
 
-  // Init — reset printer and explicitly set normal character size.
-  // Avoids any residual scale settings from RawBT or a previous job.
+  // Init — reset printer, then apply the user-configured character size.
   cmd(CMD.INIT)
   cmd(CMD.CHAR_NORMAL)
+  if (fontSize === 'large')  cmd(CMD.SIZE_LARGE)
+  else if (fontSize === 'medium') cmd(CMD.SIZE_MEDIUM)
 
   // Logo (optional — pre-computed GS v 0 bitmap bytes)
   if (logoBytes && logoBytes.length > 0) {
@@ -143,9 +152,9 @@ export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', lo
     const gross = (item.unitPrice || 0) * (item.qty || 0)
     const disc = item.lineDiscount || 0
     const net = gross - disc
-    cmd(CMD.BOLD_ON)
+    if (boldHeaders) cmd(CMD.BOLD_ON)
     line(item.name.slice(0, W))
-    cmd(CMD.BOLD_OFF)
+    if (boldHeaders) cmd(CMD.BOLD_OFF)
     line(twoCol(`  ${item.label} x${item.qty} @ ${fmt(item.unitPrice)}`, fmt(net), W))
     if (disc > 0) line(twoCol('  Discount', `-${fmt(disc)}`, W))
   })
@@ -161,9 +170,9 @@ export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', lo
   if (settings.show_vat && record.vatEnabled)
     line(twoCol('VAT (15%)', fmt(record.vatAmount || 0), W))
 
-  cmd(CMD.BOLD_ON)
+  if (boldTotals) cmd(CMD.BOLD_ON)
   line(twoCol('TOTAL', fmt(record.grandTotal || record.total || 0), W))
-  cmd(CMD.BOLD_OFF)
+  if (boldTotals) cmd(CMD.BOLD_OFF)
 
   // Payment breakdown
   if (!isQuote && settings.show_payment && payments.length > 0) {

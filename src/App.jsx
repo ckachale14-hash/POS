@@ -12,6 +12,7 @@ import Customers from './pages/Customers.jsx'
 import ChangeCredit from './pages/ChangeCredit.jsx'
 import Sync from './pages/Sync.jsx'
 import Settings from './pages/Settings.jsx'
+import Receipts from './pages/Receipts.jsx'
 import Suppliers from './pages/Suppliers.jsx'
 import PurchaseOrders from './pages/PurchaseOrders.jsx'
 import Expenses from './pages/Expenses.jsx'
@@ -39,6 +40,9 @@ const DEFAULT_SETTINGS = {
   float_cart_pages:              ['pos','dashboard','inventory','sales','customers','changeCredit','sync','settings'],
   float_cart_action:             'navigate',
   receipt_same_template:         true,
+  receipt_font_size:             'small',
+  receipt_bold_headers:          true,
+  receipt_bold_totals:           true,
   receipt_show_logo:             true,
   receipt_show_cashier:          true,
   receipt_show_vat:              true,
@@ -239,6 +243,11 @@ export default function App() {
       return
     }
     window.__ps_back = () => {
+      // Let open modals (dialogs, drawers) intercept the back button first
+      if (typeof window.__ps_back_overlay === 'function') {
+        window.__ps_back_overlay()
+        return
+      }
       // Functional update so this closure never goes stale
       setPageHistory(prev => {
         if (prev.length === 0) return prev // at root page — stay, don't close
@@ -303,6 +312,7 @@ export default function App() {
             {page === 'dashboard'    && <Dashboard    user={user} navigate={navigate} />}
             {page === 'inventory'    && <Inventory    user={user} />}
             {page === 'sales'        && <SalesHistory user={user} />}
+            {page === 'receipts'     && <Receipts     user={user} />}
             {page === 'customers'    && <Customers    user={user} navigate={navigate} />}
             {page === 'changeCredit' && <ChangeCredit user={user} />}
             {page === 'suppliers'    && <Suppliers      user={user} />}

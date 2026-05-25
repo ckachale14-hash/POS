@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react'
-import { X, Printer, Send } from 'lucide-react'
+import { X, Printer, Send, Download } from 'lucide-react'
 import { fmt } from '../lib/utils'
 import { getSetting } from '../lib/db'
 import { printReceipt as driverPrint } from '../lib/printer'
@@ -27,7 +27,10 @@ export default function Receipt({ record, shop, onSendWhatsApp, onClose, readOnl
       s.show_email   = await getSetting('receipt_show_email', true)
       s.show_website = await getSetting('receipt_show_website', true)
       s.footer_text  = await getSetting('receipt_footer_text', 'Thank you for shopping with us!\nGoods sold are not returnable.')
-      s.same_template = await getSetting('receipt_same_template', true)
+      s.same_template  = await getSetting('receipt_same_template', true)
+      s.font_size      = await getSetting('receipt_font_size', 'small')
+      s.bold_headers   = await getSetting('receipt_bold_headers', true)
+      s.bold_totals    = await getSetting('receipt_bold_totals', true)
       setSettings(s)
       const l = await getSetting('shop_logo')
       if (l) setLogo(l)
@@ -120,7 +123,27 @@ export default function Receipt({ record, shop, onSendWhatsApp, onClose, readOnl
       showFooter && footerText ? footerText : '',
     ].filter(l => l !== false && l !== undefined && l !== null && l !== '').join('\n').replace(/\n{3,}/g, '\n\n').trim()
 
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+    // Use saved customer phone if available (digits and + only, strip spaces/dashes)
+    const rawPhone = (record.customerPhone || '').replace(/[\s\-().]/g, '')
+    const phone = rawPhone.match(/^\+?\d{7,15}$/) ? rawPhone : ''
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  const doPdf = () => {
+    const html = printRef.current?.innerHTML || ''
+    const doc = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${record.ref || record.id}</title>
+<style>
+  body{font-family:monospace;font-size:12px;margin:0;padding:16px;max-width:320px}
+  .bold{font-weight:700} .divider{border-top:1px dashed #999;margin:6px 0}
+  .center{text-align:center} .flex{display:flex;justify-content:space-between}
+  img.logo{max-width:120px;max-height:60px}
+  @media print{@page{margin:4mm} body{padding:0}}
+</style></head><body>${html}<script>window.onload=function(){window.print()}<\/script></body></html>`
+    const blob = new Blob([doc], { type: 'text/html' })
+    const url  = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
   }
 
   if (!record) return null
@@ -288,25 +311,15 @@ export default function Receipt({ record, shop, onSendWhatsApp, onClose, readOnl
             </div>
           )}
           <div className="flex gap-2">
-          {!readOnly ? (
-            <>
-              <button onClick={doPrint} disabled={printing} className="btn-secondary flex-1 gap-2 disabled:opacity-60">
-                <Printer size={14} />{printing ? 'Printing…' : 'Print'}
-              </button>
-              <button onClick={doWhatsApp} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition active:scale-95">
-                <Send size={14} />WhatsApp
-              </button>
-            </>
-          ) : (
-            <>
-              <button onClick={doPrint} disabled={printing} className="btn-secondary flex-1 gap-2 disabled:opacity-60">
-                <Printer size={14} />{printing ? 'Printing…' : 'Print'}
-              </button>
-              <button onClick={doWhatsApp} className="btn-secondary flex-1 gap-2">
-                <Send size={14} />WhatsApp
-              </button>
-            </>
-          )}
+            <button onClick={doPrint} disabled={printing} className="btn-secondary flex-1 gap-2 disabled:opacity-60">
+              <Printer size={14} />{printing ? 'Printing…' : 'Print'}
+            </button>
+            <button onClick={doPdf} className="btn-secondary flex-1 gap-2">
+              <Download size={14} />PDF
+            </button>
+            <button onClick={doWhatsApp} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition active:scale-95">
+              <Send size={14} />WhatsApp
+            </button>
           </div>
         </div>
       </div>

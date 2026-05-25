@@ -195,6 +195,7 @@ export default function POS({ user, online, navigate }) {
   const [customerSearch, setCustomerSearch]   = useState('')
   const [customerSuggestions, setCustomerSuggestions] = useState([])
   const [selectedCustomerCredit, setSelectedCustomerCredit] = useState(null)
+  const [customerPhone, setCustomerPhone]     = useState('')
 
   // Checkout payment state
   const [payments, setPayments]               = useState([{ method: 'cash', amount: '' }])
@@ -262,6 +263,14 @@ export default function POS({ user, online, navigate }) {
     })()
   }, [])
 
+  // Register back-button overlay so Android back closes the receipt dialog
+  useEffect(() => {
+    if (printReceipt) {
+      window.__ps_back_overlay = () => setPrintReceipt(null)
+      return () => { window.__ps_back_overlay = null }
+    }
+  }, [printReceipt])
+
   // Customer lookup as user types
   useEffect(() => {
     if (!customerSearch.trim()) { setCustomerSuggestions([]); return }
@@ -275,12 +284,14 @@ export default function POS({ user, online, navigate }) {
     setCustomerSearch(val)
     setCustomer(val)
     setCustomerId(null)
+    setCustomerPhone('')
     setSelectedCustomerCredit(null)
   }
 
   const selectCustomer = async (c) => {
     setCustomer(c.name)
     setCustomerId(c.id)
+    setCustomerPhone(c.phone || '')
     setCustomerSearch('')
     setCustomerSuggestions([])
     // Load outstanding credit/change balance
@@ -412,6 +423,7 @@ export default function POS({ user, online, navigate }) {
     const saleData = {
       ref, type: 'sale', status: 'completed',
       customer: effectiveName, customerId: finalCustomerId ? String(finalCustomerId) : '',
+      customerPhone: customerPhone || '',
       items: cart, ...totals,
       payments: payments.map(p => ({ method: p.method, amount: parseFloat(p.amount) || 0 })),
       amountPaid: totalPaid, changeOwed,
