@@ -205,6 +205,9 @@ export function hasSunmiJSAPI() {
 async function printViaSunmiJSAPI(record, shop, settings) {
   const api = window.SunmiPrinter
   if (!api) throw new Error('Sunmi JSAPI not available')
+  if (typeof api.isReady === 'function' && !api.isReady()) {
+    throw new Error('Sunmi printer service is still starting up — please wait a few seconds and try again')
+  }
 
   const isQuote = record.type === 'quote'
   const payments = record.payments?.length > 0
@@ -254,51 +257,43 @@ async function printViaSunmiJSAPI(record, shop, settings) {
 
   await api.printText('-'.repeat(32) + '\n')
 
+  // Use printText + manual column padding instead of printColumnsText.
+  // printColumnsText is not present in all Sunmi firmware versions and calling
+  // it on unsupported firmware throws a DeadObjectException that kills the binder.
+  const row = (left, right, W = 32) => api.printText(twoCol(left, right, W) + '\n')
+
   for (const item of (record.items || [])) {
     const net = (item.unitPrice || 0) * (item.qty || 0) - (item.lineDiscount || 0)
     await api.setPrinterStyle(8, 1)
     await api.printText(item.name + '\n')
     await api.setPrinterStyle(8, 0)
-    await api.printColumnsText(
-      [`  ${item.label} x${item.qty} @ $${parseFloat(item.unitPrice).toFixed(2)}`, `$${net.toFixed(2)}`],
-      [24, 8], [0, 2]
-    )
-    if ((item.lineDiscount || 0) > 0) {
-      await api.printColumnsText(['  Discount', `-$${item.lineDiscount.toFixed(2)}`], [24, 8], [0, 2])
-    }
+    await row(`  ${item.label} x${item.qty} @ $${parseFloat(item.unitPrice).toFixed(2)}`, `$${net.toFixed(2)}`)
+    if ((item.lineDiscount || 0) > 0) await row('  Discount', `-$${item.lineDiscount.toFixed(2)}`)
   }
 
   await api.printText('-'.repeat(32) + '\n')
-  await api.printColumnsText(['Subtotal', fmt(record.subtotal || 0)], [24, 8], [0, 2])
-  if ((record.lineDiscountTotal || 0) > 0)
-    await api.printColumnsText(['Line discounts', `-${fmt(record.lineDiscountTotal)}`], [24, 8], [0, 2])
-  if ((record.saleDiscount || 0) > 0)
-    await api.printColumnsText(['Sale discount', `-${fmt(record.saleDiscount)}`], [24, 8], [0, 2])
-  if (settings.show_vat && record.vatEnabled)
-    await api.printColumnsText(['VAT (15%)', fmt(record.vatAmount || 0)], [24, 8], [0, 2])
+  await row('Subtotal', fmt(record.subtotal || 0))
+  if ((record.lineDiscountTotal || 0) > 0) await row('Line discounts', `-${fmt(record.lineDiscountTotal)}`)
+  if ((record.saleDiscount || 0) > 0)      await row('Sale discount',  `-${fmt(record.saleDiscount)}`)
+  if (settings.show_vat && record.vatEnabled) await row('VAT (15%)', fmt(record.vatAmount || 0))
 
   await api.setFontSize(28)
   await api.setPrinterStyle(8, 1)
-  await api.printColumnsText(
-    ['TOTAL', fmt(record.grandTotal || record.total || 0)],
-    [24, 8], [0, 2]
-  )
+  await api.printText(twoCol('TOTAL', fmt(record.grandTotal || record.total || 0)) + '\n')
   await api.setPrinterStyle(8, 0)
   await api.setFontSize(24)
 
   if (!isQuote && settings.show_payment && payments.length > 0) {
     await api.printText('-'.repeat(32) + '\n')
     await api.printText('Payment:\n')
-    for (const p of payments) {
-      await api.printColumnsText([`  ${p.method || 'cash'}`, fmt(p.amount)], [24, 8], [0, 2])
-    }
+    for (const p of payments) await row(`  ${p.method || 'cash'}`, fmt(p.amount))
   }
 
   if (!isQuote && settings.show_change) {
-    if ((record.changeOwed || 0) > 0) await api.printColumnsText(['Change owed', fmt(record.changeOwed)], [24, 8], [0, 2])
-    if ((record.changeGiven || 0) > 0) await api.printColumnsText(['Change given', fmt(record.changeGiven)], [24, 8], [0, 2])
-    if ((record.changeStillOwed || 0) > 0) await api.printColumnsText(['Change still owed', fmt(record.changeStillOwed)], [24, 8], [0, 2])
-    if ((record.amountOwing || 0) > 0) await api.printColumnsText(['AMOUNT OWING', fmt(record.amountOwing)], [24, 8], [0, 2])
+    if ((record.changeOwed    || 0) > 0) await row('Change owed',       fmt(record.changeOwed))
+    if ((record.changeGiven   || 0) > 0) await row('Change given',      fmt(record.changeGiven))
+    if ((record.changeStillOwed||0) > 0) await row('Change still owed', fmt(record.changeStillOwed))
+    if ((record.amountOwing   || 0) > 0) await row('AMOUNT OWING',      fmt(record.amountOwing))
   }
 
   if (settings.show_footer && settings.footer_text) {
@@ -308,8 +303,9 @@ async function printViaSunmiJSAPI(record, shop, settings) {
     await api.setAlignment(0)
   }
 
-  await api.lineWrap(4)
-  await api.cutPaper(1)
+  // Feed 8 lines so the receipt clears the paper slot (V1s-G has no auto-cutter)
+  await api.lineWrap(8)
+  try { await api.cutPaper(1) } catch (_) { /* no cutter on this model — ignore */ }
 }
 
 // ── Bluetooth ESC/POS ──────────────────────────────────────────────────────
@@ -398,13 +394,12 @@ async function printViaNativeBT(record, shop, settings, paperWidth) {
   const devices = bt.scan()
   if (!devices.length) throw new Error('No paired Bluetooth printers found. Pair the printer in Android Settings first.')
 
-  // If only one device, use it directly; otherwise surface a picker.
-  // For now we use the first paired device. A settings UI can be added later.
+  // Use the MAC saved in Settings → Printer, defaulting to the first paired device.
   const savedMac = await getSetting('native_bt_mac', devices[0]?.address || '')
   if (!savedMac) throw new Error('No Bluetooth printer MAC configured.')
 
   const data = buildEscPos(record, shop, settings, paperWidth)
-  const ok = bt.print(data, savedMac)
+  const ok = await bt.print(data, savedMac)
   if (!ok) throw new Error('Bluetooth print failed — is the printer on and paired?')
 }
 

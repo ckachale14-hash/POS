@@ -49,7 +49,7 @@ export default defineConfig({
           },
         ],
       },
-      includeAssets: ['favicon.ico', 'logo.jpg'],
+      includeAssets: ['logo.png', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
       manifest: {
         name: 'PortionSpot POS',
         short_name: 'PortionSpot',

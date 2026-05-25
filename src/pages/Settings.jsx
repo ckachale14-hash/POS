@@ -465,6 +465,10 @@ function PrinterTab({ showToast }) {
   const [networkIp, setNetworkIp]               = useState('')
   const [networkPort, setNetworkPort]           = useState('9100')
   const [rawbtAddress, setRawbtAddress]         = useState('127.0.0.1:9100')
+  const [nativeBtMac, setNativeBtMac]           = useState('')
+  const [nativeBtDevices, setNativeBtDevices]   = useState([])
+  const [isNativeBtReady, setIsNativeBtReady]   = useState(false)
+  const [statusKey, setStatusKey]               = useState(0)
 
   useEffect(() => {
     getSetting('printer_type', 'browser').then(setPrinterType)
@@ -473,6 +477,22 @@ function PrinterTab({ showToast }) {
     getSetting('network_printer_ip', '').then(setNetworkIp)
     getSetting('network_printer_port', '9100').then(setNetworkPort)
     getSetting('rawbt_server_address', '127.0.0.1:9100').then(setRawbtAddress)
+    getSetting('native_bt_mac', '').then(setNativeBtMac)
+
+    // Detect native BT bridge — check immediately then retry after 500 ms in case
+    // the BRIDGE_JS injection hasn't finished by the time this component mounts.
+    const detectNativeBT = () => {
+      if (typeof window._NativeBT !== 'undefined') {
+        setIsNativeBtReady(true)
+        try { setNativeBtDevices(window._NativeBT.scan() || []) } catch {}
+        return true
+      }
+      return false
+    }
+    if (!detectNativeBT()) {
+      const t = setTimeout(() => detectNativeBT(), 500)
+      return () => clearTimeout(t)
+    }
   }, [])
 
   const save = async () => {
@@ -481,6 +501,7 @@ function PrinterTab({ showToast }) {
     await setSetting('network_printer_ip', networkIp)
     await setSetting('network_printer_port', networkPort)
     await setSetting('rawbt_server_address', rawbtAddress)
+    await setSetting('native_bt_mac', nativeBtMac)
     showToast('Printer settings saved')
   }
 
@@ -545,6 +566,13 @@ function PrinterTab({ showToast }) {
     },
   ]
 
+  const isNativeBt         = isNativeBtReady
+  const isSunmiApiPresent  = typeof window.SunmiPrinter !== 'undefined'
+  // statusKey forces re-evaluation when the user taps "Check status"
+  // eslint-disable-next-line no-unused-expressions
+  void statusKey
+  const isSunmiServiceReady = isSunmiApiPresent && window.SunmiPrinter.isReady?.() === true
+
   return (
     <>
       <Section title="Printer Type" desc="Choose how receipts are sent to the printer">
@@ -585,16 +613,34 @@ function PrinterTab({ showToast }) {
       {printerType === 'sunmi' && (
         <Section title="Sunmi Setup" desc="Using the Sunmi V1s-G built-in printer">
           {/* Live detection badge */}
-          {typeof window.SunmiPrinter !== 'undefined' ? (
-            <div className="p-3 bg-green-50 rounded-xl border border-green-200 mb-3 flex items-start gap-2">
-              <span className="text-green-600 text-base leading-none mt-0.5">✓</span>
-              <div>
-                <p className="text-xs font-bold text-green-800">Sunmi printer detected</p>
-                <p className="text-[10px] text-green-700 leading-relaxed">
-                  The Sunmi JSAPI is available. Printing will go directly to the built-in thermal printer.
-                </p>
+          {isSunmiApiPresent ? (
+            isSunmiServiceReady ? (
+              <div className="p-3 bg-green-50 rounded-xl border border-green-200 mb-3 flex items-start gap-2">
+                <span className="text-green-600 text-base leading-none mt-0.5">✓</span>
+                <div>
+                  <p className="text-xs font-bold text-green-800">Sunmi printer ready</p>
+                  <p className="text-[10px] text-green-700 leading-relaxed">
+                    Printer service connected. Receipts will print directly to the built-in thermal printer.
+                  </p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 mb-3 flex items-start gap-2">
+                <span className="text-amber-500 text-base leading-none mt-0.5">⚠</span>
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-amber-800">Printer service connecting…</p>
+                  <p className="text-[10px] text-amber-700 leading-relaxed mb-2">
+                    The Sunmi API is present but the printer service hasn't connected yet. Wait a few seconds, then tap <strong>Check status</strong>. If it stays stuck, try closing and reopening the app.
+                  </p>
+                  <button
+                    onClick={() => setStatusKey(k => k + 1)}
+                    className="text-[10px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition"
+                  >
+                    Check status
+                  </button>
+                </div>
+              </div>
+            )
           ) : (
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 mb-3">
               <div className="flex items-start gap-2 mb-2">
@@ -673,47 +719,103 @@ function PrinterTab({ showToast }) {
       {/* ── Bluetooth pairing ── */}
       {printerType === 'bluetooth' && (
         <Section title="Bluetooth Pairing" desc="Pair this device with a Bluetooth thermal printer">
-          <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 mb-4">
-            <p className="text-[10px] text-blue-700 leading-relaxed">
-              <strong>Chrome on Android</strong> supports Web Bluetooth. Safari (iOS) does not — use the Browser print option on iPhone/iPad.
-              The printer must be powered on and in pairing mode.
-            </p>
-          </div>
-          <button
-            onClick={scanBluetooth}
-            disabled={scanning}
-            className="btn-primary w-full mb-4 disabled:opacity-60"
-          >
-            {scanning
-              ? <><BluetoothSearching size={15} className="animate-pulse" />Scanning…</>
-              : <><Bluetooth size={15} />Scan for Printers</>}
-          </button>
-
-          {savedPrinters.length > 0 && (
-            <div className="space-y-2 mb-4">
-              <p className="text-xs font-semibold text-gray-500">Paired printers</p>
-              {savedPrinters.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl">
-                  <Bluetooth size={14} className="text-blue-500 shrink-0" />
-                  <span className="text-sm text-gray-900 flex-1 font-medium">{p.name}</span>
-                  <button onClick={() => removeSaved(p.id)} className="text-gray-300 hover:text-red-400 transition">
-                    <X size={14} />
-                  </button>
+          {isNativeBt ? (
+            /* ── Native Classic BT (APK) path ── */
+            <>
+              <div className="p-3 bg-green-50 rounded-xl border border-green-200 mb-4 flex items-start gap-2">
+                <span className="text-green-600 text-base leading-none mt-0.5">✓</span>
+                <div>
+                  <p className="text-xs font-bold text-green-800">Classic Bluetooth available</p>
+                  <p className="text-[10px] text-green-700 leading-relaxed">
+                    Running in the PortionSpot app — uses Classic Bluetooth (SPP/RFCOMM) which works with virtually all thermal printers.
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
 
-          <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-            <p className="text-xs font-bold text-gray-700 mb-1">How it works</p>
-            <ol className="text-[10px] text-gray-500 space-y-1 list-decimal list-inside leading-relaxed">
-              <li>Power on your Bluetooth thermal printer</li>
-              <li>Enable Bluetooth on this phone/device</li>
-              <li>Tap <strong>Scan for Printers</strong> above and select yours</li>
-              <li>Each time you print, the device picker appears — select the same printer</li>
-              <li>Compatible with most 58mm/80mm Bluetooth thermal printers</li>
-            </ol>
-          </div>
+              {nativeBtDevices.length > 0 ? (
+                <div className="space-y-2 mb-4">
+                  <p className="text-xs font-semibold text-gray-500">Paired devices — tap to select your printer</p>
+                  {nativeBtDevices.map(d => (
+                    <button
+                      key={d.address}
+                      onClick={() => { setNativeBtMac(d.address); setSetting('native_bt_mac', d.address) }}
+                      className={`w-full flex items-center gap-3 p-2.5 rounded-xl border-2 text-left transition ${nativeBtMac === d.address ? 'border-brand-500 bg-brand-50' : 'border-gray-100 hover:border-gray-200'}`}
+                    >
+                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${nativeBtMac === d.address ? 'border-brand-600' : 'border-gray-300'}`}>
+                        {nativeBtMac === d.address && <div className="w-2 h-2 rounded-full bg-brand-600" />}
+                      </div>
+                      <Bluetooth size={14} className={nativeBtMac === d.address ? 'text-brand-500 shrink-0' : 'text-gray-400 shrink-0'} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{d.name}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{d.address}</p>
+                      </div>
+                      {nativeBtMac === d.address && <CheckCircle2 size={14} className="text-brand-600 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 mb-4">
+                  <p className="text-[10px] text-amber-700 leading-relaxed">
+                    No paired Bluetooth devices found. Go to <strong>Android Settings → Bluetooth</strong>, pair your printer, then come back here.
+                  </p>
+                </div>
+              )}
+
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-xs font-bold text-gray-700 mb-1">How it works</p>
+                <ol className="text-[10px] text-gray-500 space-y-1 list-decimal list-inside leading-relaxed">
+                  <li>Pair your printer in <strong>Android Settings → Bluetooth</strong></li>
+                  <li>Come back here and tap it in the list above to select it</li>
+                  <li>Tap Print on any receipt — sends directly to the selected printer over SPP</li>
+                  <li>No share sheet, no picker dialog every time</li>
+                </ol>
+              </div>
+            </>
+          ) : (
+            /* ── Web Bluetooth (Chrome / browser) path ── */
+            <>
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 mb-4">
+                <p className="text-[10px] text-blue-700 leading-relaxed">
+                  <strong>Chrome on Android</strong> supports Web Bluetooth (BLE printers only). Most cheap thermal printers use Classic Bluetooth — if your printer doesn't appear in the scan, install the <strong>PortionSpot APK</strong> for Classic BT support. Safari (iOS) does not support this — use Browser Print instead.
+                </p>
+              </div>
+              <button
+                onClick={scanBluetooth}
+                disabled={scanning}
+                className="btn-primary w-full mb-4 disabled:opacity-60"
+              >
+                {scanning
+                  ? <><BluetoothSearching size={15} className="animate-pulse" />Scanning…</>
+                  : <><Bluetooth size={15} />Scan for Printers</>}
+              </button>
+
+              {savedPrinters.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <p className="text-xs font-semibold text-gray-500">Paired printers</p>
+                  {savedPrinters.map(p => (
+                    <div key={p.id} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-xl">
+                      <Bluetooth size={14} className="text-blue-500 shrink-0" />
+                      <span className="text-sm text-gray-900 flex-1 font-medium">{p.name}</span>
+                      <button onClick={() => removeSaved(p.id)} className="text-gray-300 hover:text-red-400 transition">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                <p className="text-xs font-bold text-gray-700 mb-1">How it works</p>
+                <ol className="text-[10px] text-gray-500 space-y-1 list-decimal list-inside leading-relaxed">
+                  <li>Power on your Bluetooth thermal printer</li>
+                  <li>Enable Bluetooth on this phone/device</li>
+                  <li>Tap <strong>Scan for Printers</strong> above and select yours</li>
+                  <li>Each time you print, the device picker appears — select the same printer</li>
+                  <li>Compatible with BLE 58mm/80mm Bluetooth thermal printers</li>
+                </ol>
+              </div>
+            </>
+          )}
         </Section>
       )}
 

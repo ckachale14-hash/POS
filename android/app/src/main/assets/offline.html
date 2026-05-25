@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>PortionSpot POS — Offline</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #f9fafb;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: #111827;
+    padding: 24px;
+    text-align: center;
+  }
+  .icon { font-size: 64px; margin-bottom: 24px; opacity: .9; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #DC2626; }
+  p {
+    font-size: 15px; color: #6B7280; line-height: 1.6;
+    max-width: 320px; margin-bottom: 32px;
+  }
+  .btn {
+    display: inline-block;
+    background: #DC2626;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 14px 32px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    margin-bottom: 12px;
+    width: 240px;
+  }
+  .btn-secondary { background: #1F2937; }
+  .btn-ghost {
+    background: transparent;
+    border: 2px solid #D1D5DB;
+    color: #6B7280;
+    font-size: 13px;
+    padding: 10px 24px;
+    width: 240px;
+  }
+  .divider {
+    width: 240px; height: 1px;
+    background: #E5E7EB;
+    margin: 8px 0 20px;
+  }
+  .hint { font-size: 12px; color: #9CA3AF; margin-top: 28px; line-height: 1.6; }
+  .spinner {
+    display: none; width: 18px; height: 18px;
+    border: 3px solid #fff; border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+    margin-left: 8px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="icon">📡</div>
+<h1>No Internet Connection</h1>
+<p>
+  The POS couldn't reach the server.<br>
+  Check your Wi-Fi then tap Retry.
+</p>
+
+<button class="btn" id="retryBtn" onclick="retry()">
+  Retry
+  <span class="spinner" id="spinner"></span>
+</button>
+
+<div class="divider"></div>
+
+<button class="btn btn-secondary" onclick="openDiag()">
+  🖨️ Test Printer / Diagnostics
+</button>
+
+<br>
+
+<button class="btn btn-ghost" onclick="tryAgain()">
+  Try loading app anyway
+</button>
+
+<p class="hint">
+  Press <strong>Volume Up × 5</strong> to open Diagnostics at any time.<br>
+  Your sales data is safe — everything is stored locally on this device.
+</p>
+
+<script>
+  function retry() {
+    var btn     = document.getElementById('retryBtn');
+    var spinner = document.getElementById('spinner');
+    btn.disabled = true;
+    spinner.style.display = 'inline-block';
+    setTimeout(function () {
+      window.location.href = 'https://portionspot-v11-5.vercel.app';
+    }, 600);
+  }
+
+  function tryAgain() {
+    window.location.href = 'https://portionspot-v11-5.vercel.app';
+  }
+
+  function openDiag() {
+    // _SunmiNative is always available — it is a JavascriptInterface
+    // added to the WebView regardless of which page is loaded.
+    if (typeof _SunmiNative !== 'undefined') {
+      _SunmiNative.openDiagnostics();
+    } else {
+      alert('Diagnostics not available. Press Volume Up 5 times quickly.');
+    }
+  }
+</script>
+</body>
+</html>
