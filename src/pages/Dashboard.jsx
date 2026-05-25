@@ -5,8 +5,9 @@ import {
   FileCheck, RefreshCw, ArrowUpRight, AlertTriangle, ChevronRight,
   ClipboardList, X, Printer
 } from 'lucide-react'
-import { db } from '../lib/db'
+import { db, getSetting } from '../lib/db'
 import { fmt, round2 } from '../lib/utils'
+import Receipt from '../components/Receipt.jsx'
 
 const PRESETS = [
   { label: 'Today',      getRange: () => { const t = new Date(); return [new Date(t.getFullYear(), t.getMonth(), t.getDate()), t] } },
@@ -152,6 +153,8 @@ export default function Dashboard({ user, navigate }) {
   const [zOpen, setZOpen]         = useState(false)
   const [zCounted, setZCounted]   = useState('')
   const [zFloat, setZFloat]       = useState('')
+  const [viewReceipt, setViewReceipt] = useState(null)  // receipt modal
+  const [shopInfo, setShopInfo]   = useState({})
   const intervalRef = useRef(null)
 
   const loadData = useCallback(async (from, to, pf) => {
@@ -270,7 +273,19 @@ export default function Dashboard({ user, navigate }) {
     if (range) loadData(range[0], range[1], payFilter)
   }
 
-  useEffect(() => { applyPreset('Today') }, [])
+  useEffect(() => {
+    applyPreset('Today')
+    // Load shop info for the receipt viewer
+    Promise.all([
+      getSetting('shop_name'),
+      getSetting('shop_tagline'),
+      getSetting('shop_address'),
+      getSetting('shop_phones'),
+      getSetting('shop_logo'),
+    ]).then(([name, tagline, address, phones, logo]) => {
+      setShopInfo({ name, tagline, address, phones: phones?.split(',').filter(Boolean), logo })
+    })
+  }, [])
   useEffect(() => { if (range) loadData(range[0], range[1], payFilter) }, [payFilter])
   useEffect(() => {
     intervalRef.current = setInterval(() => {
@@ -471,7 +486,18 @@ export default function Dashboard({ user, navigate }) {
                   )}
                 </div>
                 {data.recentSales.map((sale, i) => (
-                  <div key={sale.id || i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', borderBottom: i < data.recentSales.length - 1 ? '1px solid var(--surface-border)' : 'none' }}>
+                  <div
+                    key={sale.id || i}
+                    onClick={() => setViewReceipt(sale)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px 18px',
+                      borderBottom: i < data.recentSales.length - 1 ? '1px solid var(--surface-border)' : 'none',
+                      cursor: 'pointer', transition: 'background 120ms',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-2)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  >
                     <div style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <ShoppingBag size={12} style={{ color: 'var(--ink-tertiary)' }} />
                     </div>
@@ -479,6 +505,7 @@ export default function Dashboard({ user, navigate }) {
                       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sale.customer || 'Walk-in'}</div>
                       <div style={{ fontSize: 10, color: 'var(--ink-tertiary)' }}>
                         {new Date(sale.createdAt).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+                        {sale.ref && <span style={{ marginLeft: 4, fontFamily: 'monospace' }}>· {sale.ref}</span>}
                       </div>
                     </div>
                     <div style={{ flexShrink: 0, textAlign: 'right' }}>
@@ -487,6 +514,7 @@ export default function Dashboard({ user, navigate }) {
                         <div style={{ fontSize: 9, color: PAY_CONFIG[sale.payMethod]?.color || 'var(--ink-tertiary)', fontWeight: 700, textTransform: 'capitalize', marginTop: 1 }}>{sale.payMethod}</div>
                       )}
                     </div>
+                    <ChevronRight size={12} style={{ color: 'var(--ink-tertiary)', opacity: 0.5, flexShrink: 0 }} />
                   </div>
                 ))}
               </div>
@@ -503,6 +531,11 @@ export default function Dashboard({ user, navigate }) {
           </div>
         ) : null}
       </div>
+
+      {/* Receipt viewer — tap any Recent Sale row to open */}
+      {viewReceipt && (
+        <Receipt record={viewReceipt} shop={shopInfo} onClose={() => setViewReceipt(null)} readOnly />
+      )}
 
       {/* Z-Report modal */}
       {zOpen && data && (() => {

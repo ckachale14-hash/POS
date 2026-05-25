@@ -2,6 +2,8 @@ package com.portionspot.pos
 
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.util.Base64
 import android.util.Log
 import android.webkit.JavascriptInterface
@@ -80,7 +82,25 @@ class SunmiPrinterBridge(
                 )
             }
             context.startActivity(intent)
-            Log.d("PSPrinter", "RawBT intent sent — ${bytes.size} bytes → ${uri}")
+            Log.d("PSPrinter", "RawBT intent sent — ${bytes.size} bytes → $uri")
+
+            // Return to our app after a short delay so the user never sees
+            // RawBT's UI — it processes the file in the background.
+            Handler(Looper.getMainLooper()).postDelayed({
+                try {
+                    val back = context.packageManager
+                        .getLaunchIntentForPackage(context.packageName)
+                        ?.apply {
+                            addFlags(
+                                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                                Intent.FLAG_ACTIVITY_NEW_TASK
+                            )
+                        }
+                    if (back != null) context.startActivity(back)
+                } catch (e: Exception) {
+                    Log.w("PSPrinter", "Could not return to main app: ${e.message}")
+                }
+            }, 650) // 650 ms gives RawBT time to receive the URI before we take focus back
         } catch (e: Exception) {
             Log.e("PSPrinter", "RawBT print failed: ${e.message}", e)
             // Surface the error back to JS so the UI can show a toast

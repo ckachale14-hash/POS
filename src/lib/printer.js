@@ -15,13 +15,17 @@ const GS  = 0x1d
 
 const CMD = {
   INIT:          [ESC, 0x40],
+  CHAR_NORMAL:   [ESC, 0x21, 0x00],  // ESC ! 0 — reset char mode (normal size, no underline, no bold)
+  SIZE_NORMAL:   [GS,  0x21, 0x00],  // GS ! 0 — reset char size to 1×1
   ALIGN_LEFT:    [ESC, 0x61, 0x00],
   ALIGN_CENTER:  [ESC, 0x61, 0x01],
   ALIGN_RIGHT:   [ESC, 0x61, 0x02],
   BOLD_ON:       [ESC, 0x45, 0x01],
   BOLD_OFF:      [ESC, 0x45, 0x00],
-  DOUBLE_ON:     [GS,  0x21, 0x11],  // double width + height
-  DOUBLE_OFF:    [GS,  0x21, 0x00],
+  // DOUBLE_ON/OFF kept for reference but no longer used — they made text too large
+  // on Sunmi V1s-G when rendered via RawBT.
+  DOUBLE_ON:     [GS,  0x21, 0x11],  // 2× width + height (unused)
+  DOUBLE_OFF:    [GS,  0x21, 0x00],  // back to 1×1
   CUT:           [GS,  0x56, 0x41, 0x10],
   FEED_3:        [ESC, 0x64, 0x03],
   LF:            [0x0a],
@@ -66,7 +70,9 @@ function fmt(n) {
 }
 
 // ── Build ESC/POS byte array from a receipt record ─────────────────────────
-export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm') {
+// logoBytes: optional Uint8Array of pre-computed ESC/POS GS v 0 bitmap data
+//            (produced by logoDataUrlToEscPos). Pass null to omit the logo.
+export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', logoBytes = null) {
   const W = paperWidth === '80mm' ? 48 : 32
   const isQuote = record.type === 'quote'
   const payments = record.payments?.length > 0
@@ -81,14 +87,23 @@ export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm') {
   const line = (str = '') => push(textBytes(str + '\n'))
   const cmd = (...c) => push(bytes(...c))
 
-  // Init
+  // Init — reset printer and explicitly set normal character size.
+  // Avoids any residual scale settings from RawBT or a previous job.
   cmd(CMD.INIT)
+  cmd(CMD.CHAR_NORMAL)
 
-  // Header — shop name centered bold large
+  // Logo (optional — pre-computed GS v 0 bitmap bytes)
+  if (logoBytes && logoBytes.length > 0) {
+    cmd(CMD.ALIGN_CENTER)
+    chunks.push(logoBytes)
+    line('') // blank separator line after logo
+  }
+
+  // Header — shop name centered bold (no double-size: too large on 58mm via RawBT)
   cmd(CMD.ALIGN_CENTER)
-  cmd(CMD.BOLD_ON, CMD.DOUBLE_ON)
+  cmd(CMD.BOLD_ON)
   line(shop?.name || 'PORTIONSPOT MOTORS')
-  cmd(CMD.DOUBLE_OFF, CMD.BOLD_OFF)
+  cmd(CMD.BOLD_OFF)
 
   if (shop?.tagline) line(shop.tagline)
   if (shop?.address) line(shop.address)
@@ -146,9 +161,9 @@ export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm') {
   if (settings.show_vat && record.vatEnabled)
     line(twoCol('VAT (15%)', fmt(record.vatAmount || 0), W))
 
-  cmd(CMD.BOLD_ON, CMD.DOUBLE_ON)
+  cmd(CMD.BOLD_ON)
   line(twoCol('TOTAL', fmt(record.grandTotal || record.total || 0), W))
-  cmd(CMD.DOUBLE_OFF, CMD.BOLD_OFF)
+  cmd(CMD.BOLD_OFF)
 
   // Payment breakdown
   if (!isQuote && settings.show_payment && payments.length > 0) {
@@ -358,6 +373,55 @@ async function printViaBluetooth(record, shop, settings, paperWidth) {
   await device.gatt.disconnect()
 }
 
+// ── Logo → ESC/POS bitmap converter ──────────────────────────────────────
+// Converts a logo data-URL (base64 PNG/JPEG) to an ESC/POS GS v 0 raster
+// bitmap command. Returns a Uint8Array ready to embed in an ESC/POS stream,
+// or null if the image fails to load or the canvas API is unavailable.
+//
+// maxWidthDots: maximum print width in dots (default 160 ≈ 20 mm on 58mm paper).
+// The image is scaled proportionally and thresholded to 1-bit black/white.
+async function logoDataUrlToEscPos(dataUrl, maxWidthDots = 160) {
+  if (!dataUrl || typeof document === 'undefined') return null
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const scale  = Math.min(1, maxWidthDots / Math.max(img.naturalWidth, 1))
+        const dotW   = Math.min(maxWidthDots, Math.round(img.naturalWidth  * scale))
+        const dotH   = Math.round(img.naturalHeight * scale)
+        if (dotW <= 0 || dotH <= 0) { resolve(null); return }
+
+        const canvas = document.createElement('canvas')
+        canvas.width = dotW; canvas.height = dotH
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#fff'
+        ctx.fillRect(0, 0, dotW, dotH)
+        ctx.drawImage(img, 0, 0, dotW, dotH)
+
+        const px  = ctx.getImageData(0, 0, dotW, dotH).data
+        const bpr = Math.ceil(dotW / 8) // bytes per row
+        const buf = new Uint8Array(8 + bpr * dotH)
+
+        // GS v 0  m  xL xH  yL yH  [data…]
+        buf[0] = 0x1D; buf[1] = 0x76; buf[2] = 0x00; buf[3] = 0x00
+        buf[4] = bpr & 0xFF;   buf[5] = (bpr >> 8) & 0xFF
+        buf[6] = dotH & 0xFF;  buf[7] = (dotH >> 8) & 0xFF
+
+        for (let row = 0; row < dotH; row++) {
+          for (let col = 0; col < dotW; col++) {
+            const i = (row * dotW + col) * 4
+            const gray = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000
+            if (gray < 128) buf[8 + row * bpr + (col >> 3)] |= (0x80 >> (col & 7))
+          }
+        }
+        resolve(buf)
+      } catch { resolve(null) }
+    }
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
+}
+
 // ── RawBT intent bridge (Android WebView APK only) ────────────────────────
 // Used when running inside our custom APK on Sunmi hardware.
 // The native SunmiPrinterBridge.printViaRawBt() method:
@@ -372,7 +436,15 @@ async function printViaRawBtIntent(record, shop, settings, paperWidth) {
   if (typeof api?.rawBtPrint !== 'function') {
     throw new Error('RawBT intent bridge not available (rawBtPrint not injected)')
   }
-  const data = buildEscPos(record, shop, settings, paperWidth)
+
+  // Pre-compute logo bitmap if the receipt should show the shop logo.
+  // logoDataUrlToEscPos converts the data-URL to a GS v 0 ESC/POS bitmap.
+  let logoBytes = null
+  if (settings.receipt_show_logo !== false && shop?.logo) {
+    logoBytes = await logoDataUrlToEscPos(shop.logo)
+  }
+
+  const data = buildEscPos(record, shop, settings, paperWidth, logoBytes)
   // btoa only handles latin1 — use fromCharCode trick for arbitrary byte values
   let binary = ''
   for (let i = 0; i < data.length; i++) binary += String.fromCharCode(data[i])

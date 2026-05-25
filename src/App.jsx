@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { db, seedIfEmpty, getSetting } from './lib/db'
 import { INITIAL_INVENTORY, INITIAL_USERS } from './data/initial-inventory'
 import { SessionProvider } from './context/SessionContext'
@@ -151,6 +151,7 @@ export default function App() {
   const [user, setUser]             = useState(null)
   const [online, setOnline]         = useState(navigator.onLine)
   const [page, setPage]             = useState('pos')
+  const [pageHistory, setPageHistory] = useState([])
   const [showWizard, setShowWizard] = useState(false)
   const [locked, setLocked]         = useState(false)
   const [lockMins, setLockMins]     = useState(30)
@@ -227,9 +228,36 @@ export default function App() {
     }
   }, [user, lockMins])
 
+  // ── Register native back-button handler ─────────────────────────────────
+  // The Android back key calls window.__ps_back() via evaluateJavascript.
+  // When logged in: pop the navigation history (never close the Activity).
+  // When on login screen: do nothing (user must use the Logout button or
+  // the system recents to leave).
+  useEffect(() => {
+    if (!user) {
+      window.__ps_back = null
+      return
+    }
+    window.__ps_back = () => {
+      // Functional update so this closure never goes stale
+      setPageHistory(prev => {
+        if (prev.length === 0) return prev // at root page — stay, don't close
+        const target = prev[prev.length - 1]
+        setPage(target)
+        return prev.slice(0, -1)
+      })
+    }
+    return () => { window.__ps_back = null }
+  }, [user]) // re-registers whenever login state changes
+
   if (!ready) return <Loader />
 
-  const navigate = (p) => setPage(p)
+  // Navigate with history tracking so the back button can undo each jump
+  const navigate = (p) => {
+    if (p === page) return
+    setPageHistory(prev => [...prev, page])
+    setPage(p)
+  }
 
   // Save user to localStorage + mark session alive so login persists across
   // page refreshes, but is cleared when RawBT (WebView) is fully closed.
@@ -248,6 +276,7 @@ export default function App() {
     } catch {}
     setUser(null)
     setPage('pos')
+    setPageHistory([]) // clear stack so back can't resurface the last page
   }
   const handleWizardComplete = () => {
     setShowWizard(false)

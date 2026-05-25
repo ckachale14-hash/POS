@@ -228,11 +228,12 @@ export default function AppShell({ user, online, page, navigate, onLogout, child
         <div className="flex items-center gap-2.5">
           <LogoMark size="md" />
           <div>
-            <div className="font-black text-sm leading-tight tracking-tight" style={{ color: 'var(--ink-primary)' }}>
+            {/* The sidebar background is dark (#111827) — always use light text */}
+            <div className="font-black text-sm leading-tight tracking-tight" style={{ color: '#f9fafb' }}>
               {shopName.split(' ')[0]}
-              <span style={{ color: 'var(--brand-400)' }}>{shopName.split(' ').slice(1).join(' ') ? ' ' + shopName.split(' ').slice(1).join(' ') : ''}</span>
+              <span style={{ color: 'var(--brand-400)' }}>{shopName.split(' ').length > 1 ? ' ' + shopName.split(' ').slice(1).join(' ') : ''}</span>
             </div>
-            <div className="text-[10px] leading-tight" style={{ color: 'var(--ink-tertiary)' }}>Motors POS</div>
+            <div className="text-[10px] leading-tight" style={{ color: 'rgba(156,163,175,0.85)' }}>Point of Sale</div>
           </div>
         </div>
       </div>

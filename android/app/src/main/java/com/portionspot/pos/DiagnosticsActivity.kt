@@ -31,6 +31,8 @@ class DiagnosticsActivity : AppCompatActivity() {
             setPadding(dp(16), dp(16), dp(16), dp(32))
         }
 
+        root.addView(sectionRawBt())
+        root.addView(divider())
         root.addView(sectionPrinter())
         root.addView(divider())
         root.addView(sectionPackageScan())
@@ -47,86 +49,114 @@ class DiagnosticsActivity : AppCompatActivity() {
         setContentView(scroll)
     }
 
-    // ── Printer section ──────────────────────────────────────────────────────
+    // ── RawBT section ────────────────────────────────────────────────────────
 
-    private fun sectionPrinter(): View {
-        val bound = app.isPrinterBound
+    private fun sectionRawBt(): View {
+        val installed = try {
+            packageManager.getPackageInfo("ru.a402d.rawbtprinter", 0); true
+        } catch (_: Exception) { false }
 
-        return section("PRINTER") {
-            addStatus("Service",   if (bound) "Connected" else "NOT CONNECTED", bound)
-            if (bound) {
-                addStatus("Bound to", app.boundComponent.ifEmpty { "unknown" }, true)
+        return section("RAWBT PRINT BRIDGE") {
+            addStatus("RawBT App", if (installed) "Installed ✓" else "NOT INSTALLED", installed)
+
+            if (!installed) {
+                addView(label(
+                    "Install RawBT from Google Play, open it once, and select the\n" +
+                    "built-in Sunmi driver (adil_printer or InnerPrinter_4455)."
+                ).apply { textSize = 11f; setPadding(0, dp(4), 0, dp(8)) })
+            } else {
+                addView(label(
+                    "Prints go: JS → base64 bytes → cacheDir/receipt.prn →\n" +
+                    "FileProvider URI → RawBT PrintContentActivity → hardware"
+                ).apply {
+                    textSize = 10f
+                    setTextColor(Color.parseColor("#6B7280"))
+                    setPadding(0, dp(2), 0, dp(8))
+                })
             }
-            addStatus("Retries", "${app.retryCount}/${app.maxRetries}", app.retryCount < app.maxRetries)
-            addView(label("Last: ${app.lastBindLog}").apply {
-                textSize = 11f
-                setPadding(0, dp(4), 0, dp(8))
-            })
+
             addRow(
-                button("Retry Bind") {
-                    app.retryCount = 0
-                    app.isPrinterBound = false
-                    app.printerService = null
-                    app.bindPrinter()
-                    toast("Retrying all candidates…")
-                },
-                button("Test Print") { testPrint() },
-            )
-            addRow(
-                button("Feed Paper") {
-                    val svc = printer ?: run { toast("Not connected"); return@button }
+                button("Test Print via RawBT") {
+                    if (!installed) { toast("RawBT is not installed"); return@button }
                     try {
-                        svc.printerInit(null)          // must init before feed
-                        svc.lineWrap(8, null)
-                    } catch (e: Exception) { toast("Feed error: ${e.message}") }
-                },
-                button("Cut Paper")  {
-                    try { printer?.autoOutPaper(1, null) }
-                    catch (_: Exception) { printer?.cutPaper(null) }
-                },
-            )
-            addRow(
-                button("Text Test") {
-                    val svc = printer ?: run { toast("Not connected"); return@button }
-                    try {
-                        svc.printerInit(null)
-                        svc.setAlignment(1, null)
-                        svc.printText("** AIDL TEXT TEST OK **\n", null)
-                        svc.setAlignment(0, null)
-                        svc.lineWrap(6, null)
-                        toast("Text sent — check paper")
-                    } catch (e: Exception) { toast("Text test error: ${e.message}") }
-                },
+                        val bytes = buildRawBtTestEscPos()
+                        val file  = java.io.File(applicationContext.cacheDir, "receipt.prn")
+                        file.writeBytes(bytes)
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            applicationContext, "com.portionspot.pos.fileprovider", file)
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "application/octet-stream")
+                            setPackage("ru.a402d.rawbtprinter")
+                            addFlags(
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            )
+                        }
+                        startActivity(intent)
+                        toast("Sent to RawBT — check the printer")
+                    } catch (e: Exception) {
+                        toast("RawBT test failed: ${e.message}")
+                    }
+                }
             )
         }
     }
 
-    private fun testPrint() {
-        val svc = printer ?: run { toast("Printer not connected"); return }
-        try {
-            val now = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault())
-                .format(java.util.Date())
-            svc.printerInit(null)
-            svc.setAlignment(1, null)
-            svc.setPrinterStyle(8, 1, null)
-            svc.setFontSize(28f, null)
-            svc.printText("PortionSpot POS\n", null)
-            svc.setPrinterStyle(8, 0, null)
-            svc.setFontSize(24f, null)
-            svc.printText("*** PRINTER TEST ***\n", null)
-            svc.setAlignment(0, null)
-            svc.printText("------------------------\n", null)
-            svc.printText("Status : OK\n", null)
-            svc.printText("Bound  : ${app.boundComponent.ifEmpty { "unknown" }}\n", null)
-            svc.printText("Date   : $now\n", null)
-            svc.printText("Device : ${Build.MODEL}\n", null)
-            svc.printText("------------------------\n", null)
-            // Feed 8 lines so paper clears the slot (V1s-G has no auto-cutter)
-            svc.lineWrap(8, null)
-            try { svc.autoOutPaper(1, null) } catch (_: Exception) { /* no cutter — paper is ready to tear */ }
-            toast("Test page sent — pull the paper out")
-        } catch (e: Exception) {
-            toast("Print error: ${e.message}")
+    private fun buildRawBtTestEscPos(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        fun b(vararg v: Int) = out.write(v.map { it.and(0xFF).toByte() }.toByteArray())
+        fun s(str: String)   = out.write(str.toByteArray(Charsets.UTF_8))
+        val now = java.text.SimpleDateFormat("dd/MM/yy HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date())
+        b(0x1B, 0x40)            // ESC @ — full init
+        b(0x1B, 0x21, 0x00)     // ESC ! 0 — normal character mode
+        b(0x1B, 0x61, 0x01)     // center
+        b(0x1B, 0x45, 0x01)     // bold on
+        s("PortionSpot POS\n")
+        b(0x1B, 0x45, 0x00)     // bold off
+        s("*** RAWBT TEST OK ***\n")
+        b(0x1B, 0x61, 0x00)     // left
+        s("------------------------\n")
+        s("Date  : $now\n")
+        s("Device: ${Build.MODEL}\n")
+        s("Bridge: FileProvider → RawBT\n")
+        s("------------------------\n")
+        b(0x1B, 0x64, 0x08)     // feed 8 lines
+        b(0x1D, 0x56, 0x41, 0x10) // paper cut (no-op if no cutter)
+        return out.toByteArray()
+    }
+
+    // ── Printer section (AIDL service status — informational) ────────────────
+
+    private fun sectionPrinter(): View {
+        val bound = app.isPrinterBound
+
+        return section("AIDL SERVICE (internal — informational only)") {
+            addView(label(
+                "The app no longer prints via direct AIDL — it uses the RawBT bridge above.\n" +
+                "This section shows the raw service binding status for debugging."
+            ).apply {
+                textSize = 10f
+                setTextColor(Color.parseColor("#6B7280"))
+                setPadding(0, 0, 0, dp(6))
+            })
+            addStatus("Service",  if (bound) "Connected" else "Not connected", bound)
+            if (bound) addStatus("Bound to", app.boundComponent.ifEmpty { "unknown" }, true)
+            addStatus("Retries", "${app.retryCount}/${app.maxRetries}", app.retryCount < app.maxRetries)
+            addView(label("Last: ${app.lastBindLog}").apply {
+                textSize = 10f
+                setTextColor(Color.parseColor("#6B7280"))
+                setPadding(0, dp(2), 0, dp(6))
+            })
+            addRow(
+                button("Retry AIDL Bind") {
+                    app.retryCount = 0
+                    app.isPrinterBound = false
+                    app.printerService = null
+                    app.bindPrinter()
+                    toast("Retrying AIDL bind…")
+                }
+            )
         }
     }
 

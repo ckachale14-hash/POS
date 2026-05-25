@@ -183,14 +183,19 @@ class MainActivity : AppCompatActivity() {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             val url = webView.url ?: ""
             if (url.startsWith("file:///android_asset")) {
-                // On the offline page — block back, show hint toast
+                // On the offline page — show hint, never close
                 Toast.makeText(this, "No internet connection", Toast.LENGTH_SHORT).show()
                 return true
             }
-            if (webView.canGoBack()) {
-                webView.goBack()
-                return true
-            }
+            // Delegate to the JS navigation stack. window.__ps_back() pops the
+            // in-app page history. If no history (root page or login screen) it
+            // does nothing — the Activity is never finished by a back press.
+            // We ALWAYS return true here so Android never closes the Activity.
+            webView.evaluateJavascript(
+                "(function(){if(typeof window.__ps_back==='function'){window.__ps_back();}})();",
+                null
+            )
+            return true // consume — never let the system finish this Activity
         }
 
         return super.onKeyDown(keyCode, event)
