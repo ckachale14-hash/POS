@@ -101,9 +101,14 @@ export function buildEscPos(record, shop, settings = {}, paperWidth = '58mm', lo
   const line = (str = '') => push(textBytes(str + '\n'))
   const cmd = (...c) => push(bytes(...c))
 
-  // Init — reset printer, then apply the user-configured character size.
+  // Init — reset printer, explicitly clear ALL size state, then apply user size.
+  // ESC @  resets font attributes but Sunmi's AIDL init often leaves GS ! at 0x11 (2×2).
+  // GS ! 0x00 forces character magnification back to 1×1 (24 dots → 12 dots wide).
+  // ESC M 0 ensures Font A (12×24 dots, 32 chars/line on 384-dot paper).
   cmd(CMD.INIT)
-  cmd(CMD.CHAR_NORMAL)
+  cmd(CMD.CHAR_NORMAL)          // ESC ! 0x00 — clear emphasis/double-height/double-width
+  cmd([GS,  0x21, 0x00])        // GS  ! 0x00 — magnification 1×1 (the missing reset)
+  cmd([ESC, 0x4D, 0x00])        // ESC M 0    — Font A (12-dot wide)
   if (sizeN !== 0) cmd([GS, 0x21, sizeN])
 
   // Logo (optional — pre-computed GS v 0 bitmap bytes)
