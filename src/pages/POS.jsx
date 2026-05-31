@@ -65,13 +65,17 @@ const ProductCard = React.memo(function ProductCard({
   const hasBox = product.boxSize > 1 && product.boxPrice > 0
 
   return (
-    <div
+    <button
+      type="button"
       onClick={() => !isOut && onPress(product)}
-      className={`product-card relative overflow-hidden transition-all duration-150 ${
+      disabled={isOut}
+      aria-label={`${product.name}${isOut ? ', out of stock' : `, ${fmt(product.retailPrice)}`}`}
+      style={{ touchAction: 'manipulation', textAlign: 'left' }}
+      className={`product-card relative overflow-hidden transition-all duration-150 w-full ${
         isOut ? 'opacity-40 cursor-not-allowed bg-gray-50'
           : isPressed ? 'scale-[0.96] shadow-inner'
           : 'hover:border-brand-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
-      } ${isAdded ? 'border-brand-400 bg-brand-50/40' : ''}`}
+      } ${isAdded ? 'border-brand-400 bg-brand-50/40' : ''} focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none`}
     >
       <div className="absolute top-1.5 right-1.5">
         {isOut ? <span className="badge-danger text-[9px] px-1.5 py-0.5">Out</span>
@@ -99,7 +103,7 @@ const ProductCard = React.memo(function ProductCard({
         <div className="text-sm font-black text-brand-600">{fmt(product.retailPrice)}</div>
       </div>
       {isAdded && <div className="absolute inset-0 bg-brand-600/10 rounded-2xl pointer-events-none animate-fade-in" />}
-    </div>
+    </button>
   )
 })
 
@@ -130,13 +134,15 @@ const CartRow = React.memo(function CartRow({
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button onClick={() => onUpdateQty(item.sku, item.mode, -1, item.subMode || '')}
-          className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition active:scale-90">
+          aria-label="Decrease quantity"
+          className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition active:scale-90 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
           <Minus size={11} className="text-gray-600" />
         </button>
-        <span className="w-6 text-center text-sm font-black text-gray-900">{item.qty}</span>
+        <span className="w-6 text-center text-sm font-black text-gray-900 tabular-nums">{item.qty}</span>
         <button
           onClick={() => isUnitLine ? handleAddLoose() : onUpdateQty(item.sku, item.mode, 1, item.subMode || '')}
-          className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-green-50 hover:border-green-200 transition active:scale-90">
+          aria-label="Increase quantity"
+          className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-green-50 hover:border-green-200 transition active:scale-90 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
           <Plus size={11} className="text-gray-600" />
         </button>
       </div>
@@ -146,12 +152,14 @@ const CartRow = React.memo(function CartRow({
       <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
         {!isUnitLine && (
           <button onClick={() => onOpenDiscount(item)}
-            className="w-6 h-6 rounded-md text-gray-400 hover:text-brand-600 hover:bg-brand-50 flex items-center justify-center transition">
+            aria-label="Add line discount"
+            className="w-6 h-6 rounded-md text-gray-400 hover:text-brand-600 hover:bg-brand-50 flex items-center justify-center transition focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
             <Tag size={11} />
           </button>
         )}
         <button onClick={() => onRemove(item.sku, item.mode, item.subMode || '')}
-          className="w-6 h-6 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition">
+          aria-label="Remove item"
+          className="w-6 h-6 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none">
           <Trash2 size={11} />
         </button>
       </div>
@@ -506,15 +514,17 @@ export default function POS({ user, online, navigate }) {
           {mode === 'quote' && <span className="badge-warning text-[10px] ml-1 shrink-0">QUOTE</span>}
         </div>
         <button onClick={() => setMode(m => m === 'sale' ? 'quote' : 'sale')}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition shrink-0 ${mode === 'quote' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-          <FileText size={12} />{mode === 'quote' ? 'Quote' : 'Sale'}
+          aria-label={`Switch to ${mode === 'quote' ? 'sale' : 'quote'} mode`}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition shrink-0 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none ${mode === 'quote' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+          <FileText size={12} aria-hidden="true" />{mode === 'quote' ? 'Quote' : 'Sale'}
         </button>
         <button onClick={vatToggle}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition shrink-0 ${vatEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+          aria-label={`VAT is ${vatEnabled ? 'on' : 'off'}, click to toggle`}
+          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition shrink-0 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none ${vatEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
           VAT {vatEnabled ? 'ON' : 'OFF'}
         </button>
-        <div className={`flex items-center gap-1 text-[10px] font-semibold shrink-0 ${online ? 'text-emerald-600' : 'text-amber-500'}`}>
-          {online ? <Wifi size={12} /> : <WifiOff size={12} />}
+        <div aria-label={online ? 'Online' : 'Offline'} role="status" className={`flex items-center gap-1 text-[10px] font-semibold shrink-0 ${online ? 'text-emerald-600' : 'text-amber-500'}`}>
+          {online ? <Wifi size={12} aria-hidden="true" /> : <WifiOff size={12} aria-hidden="true" />}
         </div>
       </div>
 
@@ -527,14 +537,16 @@ export default function POS({ user, online, navigate }) {
                 ? <ScanLine className="search-icon text-emerald-500" size={13} />
                 : <Search className="search-icon" size={13} />}
               <input ref={searchRef} defaultValue={search} onChange={e => handleSearchChange(e.target.value)}
-                placeholder="Search or scan SKU…" className={`input py-2 text-xs transition-colors ${lastScan ? 'border-emerald-400 bg-emerald-50/60' : ''}`}
+                placeholder="Search or scan SKU…" autoComplete="off" aria-label="Search products"
+                className={`input py-2 text-xs transition-colors ${lastScan ? 'border-emerald-400 bg-emerald-50/60' : ''}`}
                 style={{paddingRight: search ? '2rem' : undefined}} />
               {search && <button onClick={() => { handleSearchChange(''); setLastScan('') }} className="absolute right-3 top-1/2 -translate-y-1/2" style={{color:'var(--ink-tertiary)'}}><X size={13} /></button>}
             </div>
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar mt-2 pb-0.5">
               {categories.map(cat => (
                 <button key={cat} onClick={() => handleCatSelect(cat)}
-                  className={`cat-chip shrink-0 ${selectedCat === cat && !search ? 'cat-chip-active' : 'cat-chip-inactive'}`}>
+                  aria-pressed={selectedCat === cat && !search}
+                  className={`cat-chip shrink-0 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none ${selectedCat === cat && !search ? 'cat-chip-active' : 'cat-chip-inactive'}`}>
                   {cat === 'All' ? 'All' : cat.split(' ')[0]}
                 </button>
               ))}
@@ -552,7 +564,7 @@ export default function POS({ user, online, navigate }) {
           <div className="flex-1 overflow-y-auto p-3">
             {filteredProducts.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-40 text-gray-400">
-                <Package size={32} className="mb-2 opacity-30" />
+                <Package size={32} className="mb-2 opacity-30" aria-hidden="true" />
                 <p className="text-sm font-medium">No products found</p>
               </div>
             ) : (
@@ -567,25 +579,26 @@ export default function POS({ user, online, navigate }) {
         <div className={`${view === 'products' ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-72 lg:w-80 xl:w-96 bg-white border-l border-gray-100 shrink-0 overflow-hidden`}>
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 shrink-0">
             <div className="flex items-center gap-2">
-              <button className="md:hidden btn-ghost p-1.5" onClick={() => setView('products')}>
-                <ArrowLeft size={16} />
+              <button className="md:hidden btn-ghost p-1.5 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none" aria-label="Back to products" onClick={() => setView('products')}>
+                <ArrowLeft size={16} aria-hidden="true" />
               </button>
               <span className="font-bold text-gray-900 text-sm">
-                Cart {cartCount > 0 && `· ${cartCount}`}
+                Cart {cartCount > 0 && <span className="tabular-nums">· {cartCount}</span>}
               </span>
             </div>
             <div className="flex items-center gap-1">
               {cart.length > 0 && (
                 <>
                   <button onClick={() => { setHoldNameInput(customer || ''); setHoldNameModal(true) }}
-                    className="btn-ghost p-1.5 text-amber-600 hover:bg-amber-50" title="Hold sale">
-                    <Pause size={15} />
+                    aria-label="Hold sale"
+                    className="btn-ghost p-1.5 text-amber-600 hover:bg-amber-50 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
+                    <Pause size={15} aria-hidden="true" />
                   </button>
-                  <button onClick={() => setShowSaleDiscount(true)} className="btn-ghost p-1.5" title="Add discount">
-                    <Tag size={15} />
+                  <button onClick={() => setShowSaleDiscount(true)} aria-label="Add sale discount" className="btn-ghost p-1.5 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
+                    <Tag size={15} aria-hidden="true" />
                   </button>
-                  <button onClick={clearCart} className="btn-ghost p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50" title="Clear cart">
-                    <RotateCcw size={14} />
+                  <button onClick={clearCart} aria-label="Clear cart" className="btn-ghost p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none">
+                    <RotateCcw size={14} aria-hidden="true" />
                   </button>
                 </>
               )}
@@ -598,6 +611,8 @@ export default function POS({ user, online, navigate }) {
               <input value={customer || customerSearch}
                 onChange={e => handleCustomerInput(e.target.value)}
                 placeholder="Customer name (optional)"
+                autoComplete="name"
+                aria-label="Customer name"
                 className="input py-2 text-xs pr-8" />
               {customerId && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -678,7 +693,7 @@ export default function POS({ user, online, navigate }) {
               )}
               <div className="flex justify-between font-black text-base pt-1 border-t border-gray-200">
                 <span className="text-gray-900">TOTAL</span>
-                <span className="text-brand-600">{fmt(totals.grandTotal)}</span>
+                <span className="text-brand-600 tabular-nums">{fmt(totals.grandTotal)}</span>
               </div>
             </div>
           )}
@@ -700,7 +715,7 @@ export default function POS({ user, online, navigate }) {
         {/* Mobile cart FAB */}
         {view === 'products' && cart.length > 0 && (
           <button onClick={() => setView('cart')}
-            className="md:hidden fixed bottom-20 right-4 z-30 flex items-center gap-2 px-4 py-3 bg-brand-600 text-white rounded-2xl shadow-lg font-bold text-sm animate-scale-in">
+            className="md:hidden fixed bottom-20 right-4 z-30 flex items-center gap-2 px-4 py-3 bg-brand-600 text-white rounded-2xl shadow-lg font-bold text-sm motion-safe:animate-scale-in">
             <ShoppingCart size={16} />
             <span>{cartCount}</span>
             <span className="text-brand-200 font-medium">{fmt(totals.grandTotal)}</span>
@@ -710,14 +725,14 @@ export default function POS({ user, online, navigate }) {
 
       {/* Price modal */}
       {priceModal && (
-        <div className="modal-overlay animate-fade-in" onClick={() => setPriceModal(null)}>
+        <div className="modal-overlay animate-fade-in overscroll-contain" onClick={() => setPriceModal(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
               <div>
                 <p className="font-bold text-gray-900 text-sm">{priceModal.name}</p>
                 <p className="text-[10px] text-gray-400 font-mono">{priceModal.sku}</p>
               </div>
-              <button onClick={() => setPriceModal(null)}><X size={17} className="text-gray-400" /></button>
+              <button onClick={() => setPriceModal(null)} aria-label="Close" className="focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded-lg p-0.5"><X size={17} className="text-gray-400" aria-hidden="true" /></button>
             </div>
             <div className="p-4 space-y-2.5">
               <p className="text-xs text-gray-500 font-medium mb-3">Select price type:</p>
@@ -754,15 +769,15 @@ export default function POS({ user, online, navigate }) {
 
       {/* Line discount modal */}
       {lineDiscountModal && (
-        <div className="modal-overlay animate-fade-in" onClick={() => setLineDiscountModal(null)}>
+        <div className="modal-overlay animate-fade-in overscroll-contain" onClick={() => setLineDiscountModal(null)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
               <p className="font-bold text-gray-900 text-sm">Line Discount — {lineDiscountModal.name}</p>
-              <button onClick={() => setLineDiscountModal(null)}><X size={17} className="text-gray-400" /></button>
+              <button onClick={() => setLineDiscountModal(null)} aria-label="Close" className="focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded-lg p-0.5"><X size={17} className="text-gray-400" aria-hidden="true" /></button>
             </div>
             <div className="p-4">
-              <label className="block text-xs font-medium text-gray-600 mb-2">Discount amount ($)</label>
-              <input type="number" min="0" value={lineDiscountVal} onChange={e => setLineDiscountVal(e.target.value)}
+              <label htmlFor="line-discount-input" className="block text-xs font-medium text-gray-600 mb-2">Discount amount ($)</label>
+              <input id="line-discount-input" type="number" inputMode="decimal" min="0" value={lineDiscountVal} onChange={e => setLineDiscountVal(e.target.value)}
                 autoFocus className="input text-lg font-bold mb-4" placeholder="0.00" />
               <div className="flex gap-2">
                 <button onClick={() => setLineDiscountModal(null)} className="btn-secondary flex-1">Cancel</button>
@@ -775,15 +790,15 @@ export default function POS({ user, online, navigate }) {
 
       {/* Sale discount modal */}
       {showSaleDiscount && (
-        <div className="modal-overlay animate-fade-in" onClick={() => setShowSaleDiscount(false)}>
+        <div className="modal-overlay animate-fade-in overscroll-contain" onClick={() => setShowSaleDiscount(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
               <p className="font-bold text-gray-900 text-sm">Sale Discount</p>
-              <button onClick={() => setShowSaleDiscount(false)}><X size={17} className="text-gray-400" /></button>
+              <button onClick={() => setShowSaleDiscount(false)} aria-label="Close" className="focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded-lg p-0.5"><X size={17} className="text-gray-400" aria-hidden="true" /></button>
             </div>
             <div className="p-4">
-              <label className="block text-xs font-medium text-gray-600 mb-2">Discount amount ($)</label>
-              <input type="number" min="0" value={saleDiscountInput} onChange={e => setSaleDiscountInput(e.target.value)}
+              <label htmlFor="sale-discount-input" className="block text-xs font-medium text-gray-600 mb-2">Discount amount ($)</label>
+              <input id="sale-discount-input" type="number" inputMode="decimal" min="0" value={saleDiscountInput} onChange={e => setSaleDiscountInput(e.target.value)}
                 autoFocus className="input text-lg font-bold mb-1" placeholder="0.00" />
               {saleDiscountInput && <p className="text-xs text-gray-400 mb-4">= {totals.subtotal > 0 ? ((parseFloat(saleDiscountInput) / totals.subtotal) * 100).toFixed(1) : 0}% off</p>}
               <div className="flex gap-2">
@@ -797,11 +812,11 @@ export default function POS({ user, online, navigate }) {
 
       {/* Hold modal */}
       {holdNameModal && (
-        <div className="modal-overlay animate-fade-in" onClick={() => setHoldNameModal(false)}>
+        <div className="modal-overlay animate-fade-in overscroll-contain" onClick={() => setHoldNameModal(false)}>
           <div className="modal-box" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100">
               <p className="font-bold text-gray-900 text-sm">Hold Sale</p>
-              <button onClick={() => setHoldNameModal(false)}><X size={17} className="text-gray-400" /></button>
+              <button onClick={() => setHoldNameModal(false)} aria-label="Close" className="focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded-lg p-0.5"><X size={17} className="text-gray-400" aria-hidden="true" /></button>
             </div>
             <div className="p-4">
               <label className="block text-xs font-medium text-gray-600 mb-2">Label (optional)</label>
@@ -820,11 +835,11 @@ export default function POS({ user, online, navigate }) {
 
       {/* Checkout modal */}
       {checkoutModal && (
-        <div className="modal-overlay animate-fade-in" onClick={() => setCheckoutModal(false)}>
+        <div className="modal-overlay animate-fade-in overscroll-contain" onClick={() => setCheckoutModal(false)}>
           <div className="modal-box-lg" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 shrink-0">
               <p className="font-bold text-gray-900">Checkout — {fmt(totals.grandTotal)}</p>
-              <button onClick={() => setCheckoutModal(false)}><X size={17} className="text-gray-400" /></button>
+              <button onClick={() => setCheckoutModal(false)} aria-label="Close" className="focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded-lg p-0.5"><X size={17} className="text-gray-400" aria-hidden="true" /></button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
@@ -833,6 +848,8 @@ export default function POS({ user, online, navigate }) {
                 <label className="block text-xs font-semibold mb-1.5" style={{color:'var(--ink-secondary)'}}>Customer</label>
                 <input value={customer}
                   onChange={e => { handleCustomerInput(e.target.value) }}
+                  autoComplete="name"
+                  aria-label="Customer name"
                   className="input text-sm" placeholder="Walk-in customer (type to search)" />
                 {customerSuggestions.length > 0 && (
                   <div className="absolute left-0 right-0 top-full mt-1 rounded-xl shadow-lg z-20 overflow-hidden"
@@ -877,7 +894,7 @@ export default function POS({ user, online, navigate }) {
                         className="input py-2 text-sm flex-1">
                         {PAY_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                       </select>
-                      <input type="number" min="0" step="0.01" value={pmt.amount}
+                      <input type="number" inputMode="decimal" min="0" step="0.01" value={pmt.amount}
                         onChange={e => setPayments(prev => prev.map((p, j) => j === i ? { ...p, amount: e.target.value } : p))}
                         className="input py-2 text-sm w-28" placeholder={fmt(totals.grandTotal)} />
                       {payments.length > 1 && (
@@ -930,7 +947,7 @@ export default function POS({ user, online, navigate }) {
                     </div>
                     <div>
                       <label className="block text-[10px] text-emerald-700 font-semibold mb-1">Change actually given</label>
-                      <input type="number" min="0" max={changeOwed} step="0.01"
+                      <input type="number" inputMode="decimal" min="0" max={changeOwed} step="0.01"
                         value={changeActuallyGiven}
                         onChange={e => setChangeActuallyGiven(e.target.value)}
                         className="input text-sm py-1.5"
