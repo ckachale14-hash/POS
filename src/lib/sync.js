@@ -54,6 +54,7 @@ async function pushProducts(sb, log) {
   if (!products.length) return { pushed: 0 }
   const rows = products.map(p => ({
     sku: p.sku, name: p.name, category: p.category,
+    product_type: p.productType || 'box',
     box_price: p.boxPrice || 0, box_size: p.boxSize || 1,
     wholesale_price: p.wholesalePrice || 0, retail_price: p.retailPrice || 0,
     cost_price: p.costPrice || 0, stock_boxes: p.stockBoxes || 0,
@@ -139,6 +140,7 @@ async function pullProducts(sb, log) {
     const existing = await db.products.where('sku').equals(row.sku).first()
     const mapped = {
       sku: row.sku, name: row.name, category: row.category,
+      productType: row.product_type || 'box',
       boxPrice: row.box_price, boxSize: row.box_size,
       wholesalePrice: row.wholesale_price, retailPrice: row.retail_price,
       costPrice: row.cost_price, stockBoxes: row.stock_boxes,
@@ -260,6 +262,7 @@ export async function forcePullAll(log) {
       const existing = await db.products.where('sku').equals(row.sku).first()
       const mapped = {
         sku: row.sku, name: row.name, category: row.category,
+        productType: row.product_type || 'box',
         boxPrice: row.box_price, boxSize: row.box_size,
         wholesalePrice: row.wholesale_price, retailPrice: row.retail_price,
         costPrice: row.cost_price, stockBoxes: row.stock_boxes,
@@ -354,6 +357,7 @@ export async function initialPull(url, key, log) {
     for (const row of products) {
       await db.products.add({
         sku: row.sku, name: row.name, category: row.category,
+        productType: row.product_type || 'box',
         boxPrice: row.box_price, boxSize: row.box_size,
         wholesalePrice: row.wholesale_price, retailPrice: row.retail_price,
         costPrice: row.cost_price, stockBoxes: row.stock_boxes,

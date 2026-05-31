@@ -10,6 +10,7 @@ import { useBarcodeScanner } from '../lib/useBarcode'
 
 const EMPTY_PRODUCT = {
   sku: '', name: '', category: CATEGORIES[0],
+  productType: 'box',
   boxPrice: '', boxSize: 1,
   wholesalePrice: '', retailPrice: '', costPrice: '',
   stockBoxes: 0, stockUnits: 0, active: 1,
@@ -153,13 +154,14 @@ export default function Inventory({ user }) {
 
   const saveProduct = async (data) => {
     const { id, ...rest } = data
+    const isBoxType = (rest.productType || 'box') === 'box'
     let { stockBoxes, stockUnits, boxSize } = rest
 
-    stockBoxes = parseInt(stockBoxes) || 0
+    stockBoxes = isBoxType ? (parseInt(stockBoxes) || 0) : 0
     stockUnits = parseInt(stockUnits) || 0
 
-    // Auto-convert on save
-    if (autoConvertEnabled) {
+    // Auto-convert on save (box type only)
+    if (isBoxType && autoConvertEnabled) {
       const converted = autoConvert(stockBoxes, stockUnits, parseInt(boxSize) || 1, true)
       stockBoxes = converted.stockBoxes
       stockUnits = converted.stockUnits
@@ -167,8 +169,9 @@ export default function Inventory({ user }) {
 
     const payload = {
       ...rest,
-      boxPrice:       parseFloat(rest.boxPrice) || 0,
-      boxSize:        parseInt(rest.boxSize) || 1,
+      productType:    rest.productType || 'box',
+      boxPrice:       isBoxType ? (parseFloat(rest.boxPrice) || 0) : 0,
+      boxSize:        isBoxType ? (parseInt(rest.boxSize) || 1) : 1,
       wholesalePrice: parseFloat(rest.wholesalePrice) || 0,
       retailPrice:    parseFloat(rest.retailPrice) || 0,
       costPrice:      parseFloat(rest.costPrice) || 0,
@@ -467,6 +470,33 @@ export default function Inventory({ user }) {
               <button onClick={() => setEditModal(null)}><X size={17} className="text-gray-400" /></button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar">
+
+              {/* Product type selector */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1.5">Product Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'box',   label: 'Box / Units', desc: 'Sold by box or loose unit' },
+                    { value: 'set',   label: 'Set',         desc: 'Sold as a complete set only' },
+                    { value: 'piece', label: 'Piece',       desc: 'Sold individually, no box' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setEditModal(m => ({ ...m, productType: opt.value }))}
+                      className={`p-2.5 rounded-xl border-2 text-left transition ${
+                        (editModal.productType || 'box') === opt.value
+                          ? 'border-brand-500 bg-brand-50 text-brand-700'
+                          : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">{opt.label}</div>
+                      <div className="text-[10px] mt-0.5 opacity-70">{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">SKU *</label>
@@ -489,67 +519,97 @@ export default function Inventory({ user }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Wholesale Price ($)</label>
-                  <input type="number" value={editModal.wholesalePrice} onChange={e => setEditModal(m => ({ ...m, wholesalePrice: e.target.value }))} className="input text-sm" />
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Wholesale Price ($)
+                    {(editModal.productType === 'set') && <span className="ml-1 text-gray-400 font-normal">per set</span>}
+                    {(editModal.productType === 'piece') && <span className="ml-1 text-gray-400 font-normal">each</span>}
+                  </label>
+                  <input type="number" inputMode="decimal" value={editModal.wholesalePrice} onChange={e => setEditModal(m => ({ ...m, wholesalePrice: e.target.value }))} className="input text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Retail Price ($)</label>
-                  <input type="number" value={editModal.retailPrice} onChange={e => setEditModal(m => ({ ...m, retailPrice: e.target.value }))} className="input text-sm" />
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Retail Price ($)
+                    {(editModal.productType === 'set') && <span className="ml-1 text-gray-400 font-normal">per set</span>}
+                    {(editModal.productType === 'piece') && <span className="ml-1 text-gray-400 font-normal">each</span>}
+                  </label>
+                  <input type="number" inputMode="decimal" value={editModal.retailPrice} onChange={e => setEditModal(m => ({ ...m, retailPrice: e.target.value }))} className="input text-sm" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Box Price ($)</label>
-                  <input type="number" value={editModal.boxPrice} onChange={e => setEditModal(m => ({ ...m, boxPrice: e.target.value }))} className="input text-sm" />
+              {/* Box-only fields */}
+              {(editModal.productType || 'box') === 'box' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Box Price ($)</label>
+                    <input type="number" inputMode="decimal" value={editModal.boxPrice} onChange={e => setEditModal(m => ({ ...m, boxPrice: e.target.value }))} className="input text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Units per Box</label>
+                    <input type="number" min="1" value={editModal.boxSize} onChange={e => setEditModal(m => ({ ...m, boxSize: e.target.value }))} className="input text-sm" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Units per Box</label>
-                  <input type="number" min="1" value={editModal.boxSize} onChange={e => setEditModal(m => ({ ...m, boxSize: e.target.value }))} className="input text-sm" />
-                </div>
-              </div>
+              )}
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Cost Price ($)</label>
-                <input type="number" value={editModal.costPrice} onChange={e => setEditModal(m => ({ ...m, costPrice: e.target.value }))} className="input text-sm" />
+                <input type="number" inputMode="decimal" value={editModal.costPrice} onChange={e => setEditModal(m => ({ ...m, costPrice: e.target.value }))} className="input text-sm" />
               </div>
 
-              {/* Stock entry */}
-              <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
-                <p className="text-xs font-bold text-blue-800 mb-2 flex items-center gap-1.5">
-                  <Box size={12} />Stock Quantities
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-medium text-blue-700 mb-1">
-                      Boxes (×{editModal.boxSize || 1} units each)
-                    </label>
-                    <input
-                      type="number" min="0"
-                      value={editModal.stockBoxes || 0}
-                      onChange={e => setEditModal(m => ({ ...m, stockBoxes: e.target.value }))}
-                      className="input text-sm"
-                    />
+              {/* Stock entry — box type */}
+              {(editModal.productType || 'box') === 'box' && (
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                  <p className="text-xs font-bold text-blue-800 mb-2 flex items-center gap-1.5">
+                    <Box size={12} />Stock Quantities
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-medium text-blue-700 mb-1">
+                        Boxes (×{editModal.boxSize || 1} units each)
+                      </label>
+                      <input
+                        type="number" min="0"
+                        value={editModal.stockBoxes || 0}
+                        onChange={e => setEditModal(m => ({ ...m, stockBoxes: e.target.value }))}
+                        className="input text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-medium text-blue-700 mb-1">Loose Units</label>
+                      <input
+                        type="number" min="0"
+                        value={editModal.stockUnits || 0}
+                        onChange={e => setEditModal(m => ({ ...m, stockUnits: e.target.value }))}
+                        className="input text-sm"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-medium text-blue-700 mb-1">
-                      Loose Units
-                    </label>
-                    <input
-                      type="number" min="0"
-                      value={editModal.stockUnits || 0}
-                      onChange={e => setEditModal(m => ({ ...m, stockUnits: e.target.value }))}
-                      className="input text-sm"
-                    />
-                  </div>
+                  <p className="text-[10px] text-blue-600 mt-1.5">
+                    Total: {(parseInt(editModal.stockBoxes) || 0) * (parseInt(editModal.boxSize) || 1) + (parseInt(editModal.stockUnits) || 0)} units
+                    {autoConvertEnabled && parseInt(editModal.stockUnits) >= parseInt(editModal.boxSize) && parseInt(editModal.boxSize) > 1 && (
+                      <span className="ml-1 text-amber-600">· Will auto-convert on save</span>
+                    )}
+                  </p>
                 </div>
-                <p className="text-[10px] text-blue-600 mt-1.5">
-                  Total: {(parseInt(editModal.stockBoxes) || 0) * (parseInt(editModal.boxSize) || 1) + (parseInt(editModal.stockUnits) || 0)} units
-                  {autoConvertEnabled && parseInt(editModal.stockUnits) >= parseInt(editModal.boxSize) && (
-                    <span className="ml-1 text-amber-600">· Will auto-convert on save</span>
-                  )}
-                </p>
-              </div>
+              )}
+
+              {/* Stock entry — set / piece type */}
+              {(editModal.productType === 'set' || editModal.productType === 'piece') && (
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                  <p className="text-xs font-bold text-blue-800 mb-2 flex items-center gap-1.5">
+                    <Layers size={12} />
+                    {editModal.productType === 'set' ? 'Sets in Stock' : 'Pieces in Stock'}
+                  </p>
+                  <input
+                    type="number" min="0"
+                    value={editModal.stockUnits || 0}
+                    onChange={e => setEditModal(m => ({ ...m, stockUnits: e.target.value }))}
+                    className="input text-sm"
+                  />
+                  <p className="text-[10px] text-blue-600 mt-1.5">
+                    {parseInt(editModal.stockUnits) || 0} {editModal.productType === 'set' ? 'sets' : 'pieces'} in stock
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="px-4 py-3 border-t border-gray-100 flex gap-2 shrink-0">

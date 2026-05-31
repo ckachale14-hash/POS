@@ -363,6 +363,23 @@ export default function POS({ user, online, navigate }) {
     setTimeout(() => setPressedSku(null), 180)
     const total = getTotalUnits(product)
     if (total <= 0) { showToast(`${product.name} is out of stock`, 'error'); if (navigator.vibrate) navigator.vibrate([50,30,50]); return }
+
+    const pType = product.productType || 'box'
+
+    // Sets and pieces: show WS/Retail modal if prices differ, else add at retail directly
+    if (pType === 'set' || pType === 'piece') {
+      if (product.wholesalePrice && product.wholesalePrice !== product.retailPrice) {
+        setPriceModal(product)
+      } else {
+        const result = addToCart(product, 'retail')
+        if (!result.ok) { showToast(result.msg, 'error'); return }
+        setAddedSku(product.sku); setTimeout(() => setAddedSku(null), 400)
+        showToast(`${product.name} added`, 'success'); if (navigator.vibrate) navigator.vibrate(30)
+      }
+      return
+    }
+
+    // Box type: add at retail if no box, otherwise show full price modal
     if (!product.boxSize || product.boxSize <= 1) {
       const result = addToCart(product, 'retail')
       if (!result.ok) { showToast(result.msg, 'error'); return }
@@ -749,31 +766,36 @@ export default function POS({ user, online, navigate }) {
             </div>
             <div className="p-4 space-y-2.5">
               <p className="text-xs text-gray-500 font-medium mb-3">Select price type:</p>
-              {priceModal.boxSize > 1 && priceModal.boxPrice > 0 && (
+              {/* Box option — only for box-type products */}
+              {(priceModal.productType || 'box') === 'box' && priceModal.boxSize > 1 && priceModal.boxPrice > 0 && (
                 <button onClick={() => handleAddWithMode(priceModal, 'box')}
                   className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-brand-400 hover:bg-brand-50 transition active:scale-95">
                   <div className="text-left">
                     <p className="font-bold text-sm text-gray-900">Box of {priceModal.boxSize}</p>
                     <p className="text-xs text-gray-400">Per unit: {fmt(priceModal.boxPrice / priceModal.boxSize)}</p>
                   </div>
-                  <span className="text-xl font-black text-brand-600">{fmt(priceModal.boxPrice)}</span>
+                  <span className="text-xl font-black text-brand-600 tabular-nums">{fmt(priceModal.boxPrice)}</span>
                 </button>
               )}
               <button onClick={() => handleAddWithMode(priceModal, 'wholesale')}
                 className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-blue-400 hover:bg-blue-50 transition active:scale-95">
                 <div className="text-left">
                   <p className="font-bold text-sm text-gray-900">Wholesale</p>
-                  <p className="text-xs text-gray-400">Trade price</p>
+                  <p className="text-xs text-gray-400">
+                    {priceModal.productType === 'set' ? 'Trade price per set' : priceModal.productType === 'piece' ? 'Trade price each' : 'Trade price'}
+                  </p>
                 </div>
-                <span className="text-xl font-black text-blue-600">{fmt(priceModal.wholesalePrice)}</span>
+                <span className="text-xl font-black text-blue-600 tabular-nums">{fmt(priceModal.wholesalePrice)}</span>
               </button>
               <button onClick={() => handleAddWithMode(priceModal, 'retail')}
                 className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-emerald-400 hover:bg-emerald-50 transition active:scale-95">
                 <div className="text-left">
                   <p className="font-bold text-sm text-gray-900">Retail</p>
-                  <p className="text-xs text-gray-400">Walk-in price</p>
+                  <p className="text-xs text-gray-400">
+                    {priceModal.productType === 'set' ? 'Walk-in price per set' : priceModal.productType === 'piece' ? 'Walk-in price each' : 'Walk-in price'}
+                  </p>
                 </div>
-                <span className="text-xl font-black text-emerald-600">{fmt(priceModal.retailPrice)}</span>
+                <span className="text-xl font-black text-emerald-600 tabular-nums">{fmt(priceModal.retailPrice)}</span>
               </button>
             </div>
           </div>
