@@ -71,38 +71,49 @@ const ProductCard = React.memo(function ProductCard({
       disabled={isOut}
       aria-label={`${product.name}${isOut ? ', out of stock' : `, ${fmt(product.retailPrice)}`}`}
       style={{ touchAction: 'manipulation', textAlign: 'left' }}
-      className={`product-card relative overflow-hidden transition-all duration-150 w-full ${
+      className={`product-card relative overflow-hidden w-full ${
         isOut ? 'opacity-40 cursor-not-allowed bg-gray-50'
-          : isPressed ? 'scale-[0.96] shadow-inner'
-          : 'hover:border-brand-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer'
-      } ${isAdded ? 'border-brand-400 bg-brand-50/40' : ''} focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none`}
+          : isPressed ? 'scale-[0.97] shadow-inner'
+          : isAdded ? 'border-brand-300 bg-brand-50/30'
+          : 'hover:border-brand-200 hover:shadow-[0_4px_16px_rgba(220,38,38,0.10)] hover:-translate-y-0.5 cursor-pointer'
+      } focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none`}
     >
-      <div className="absolute top-1.5 right-1.5">
-        {isOut ? <span className="badge-danger text-[9px] px-1.5 py-0.5">Out</span>
-          : isLow ? <span className="badge-warning text-[9px] px-1.5 py-0.5">{totalUnits} left</span>
-          : <span className="text-[9px] text-gray-300 font-medium">{totalUnits}</span>}
+      {/* Stock badge — top right */}
+      <div className="absolute top-2 right-2">
+        {isOut
+          ? <span className="badge-danger text-[9px] px-1.5 py-0.5">Out</span>
+          : isLow
+          ? <span className="badge-warning text-[9px] px-1.5 py-0.5">{totalUnits}</span>
+          : <span className="text-[9px] text-gray-300 tabular-nums">{totalUnits}</span>}
       </div>
+      {/* Cart count bubble — top left */}
       {inCart > 0 && (
-        <div className="absolute top-1.5 left-1.5">
-          <span className={`w-5 h-5 bg-brand-600 text-white rounded-full text-[10px] font-black flex items-center justify-center ${isAdded ? 'animate-cart-pop' : ''}`}>
+        <div className="absolute top-2 left-2">
+          <span className={`w-5 h-5 bg-brand-600 text-white rounded-full text-[10px] font-black flex items-center justify-center tabular-nums ${isAdded ? 'animate-cart-pop' : ''}`}>
             {inCart}
           </span>
         </div>
       )}
-      <div className="text-[9px] text-gray-300 font-mono mt-1 pr-6 truncate">{product.sku}</div>
-      <div className="text-xs font-bold text-gray-900 leading-tight line-clamp-2 mb-1.5 mt-0.5 pr-2">{product.name}</div>
-      <div className="mt-auto space-y-0.5">
+      {/* Price — dominant, at the top */}
+      <div className="mt-1 pr-6">
+        <div className="text-[15px] font-black text-brand-600 leading-none tabular-nums">{fmt(product.retailPrice)}</div>
+      </div>
+      {/* Name */}
+      <div className="text-[12px] font-semibold text-gray-800 leading-snug line-clamp-2 mt-1.5 mb-auto pr-2">{product.name}</div>
+      {/* Secondary prices */}
+      <div className="mt-2 space-y-0.5">
         {hasBox && (
           <div className="text-[10px] text-gray-400">
-            Box: <span className="font-semibold text-gray-600">{fmt(product.boxPrice)}</span>
+            Box <span className="font-semibold text-gray-500 tabular-nums">{fmt(product.boxPrice)}</span>
           </div>
         )}
         <div className="text-[10px] text-gray-400">
-          WS: <span className="font-semibold text-gray-600">{fmt(product.wholesalePrice)}</span>
+          WS <span className="font-semibold text-gray-500 tabular-nums">{fmt(product.wholesalePrice)}</span>
         </div>
-        <div className="text-sm font-black text-brand-600">{fmt(product.retailPrice)}</div>
       </div>
-      {isAdded && <div className="absolute inset-0 bg-brand-600/10 rounded-2xl pointer-events-none animate-fade-in" />}
+      {/* SKU — bottom, tertiary */}
+      <div className="text-[9px] text-gray-200 font-mono mt-1 truncate">{product.sku}</div>
+      {isAdded && <div className="absolute inset-0 bg-brand-600/8 rounded-2xl pointer-events-none animate-fade-in" />}
     </button>
   )
 })
@@ -129,25 +140,25 @@ const CartRow = React.memo(function CartRow({
           : <p className="text-xs font-semibold text-gray-900 leading-tight truncate">{item.name}</p>}
         <p className="text-[10px] text-gray-400 mt-0.5">{item.label} · {fmt(item.unitPrice)}/ea</p>
         {(item.lineDiscount || 0) > 0 && (
-          <p className="text-[10px] text-brand-600 font-semibold">Disc: -{fmt(item.lineDiscount)}</p>
+          <p className="text-[10px] text-brand-600 font-semibold tabular-nums">−{fmt(item.lineDiscount)}</p>
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         <button onClick={() => onUpdateQty(item.sku, item.mode, -1, item.subMode || '')}
           aria-label="Decrease quantity"
-          className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition active:scale-90 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
-          <Minus size={11} className="text-gray-600" />
+          className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-red-50 hover:border-red-200 transition active:scale-90 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
+          <Minus size={12} className="text-gray-500" />
         </button>
         <span className="w-6 text-center text-sm font-black text-gray-900 tabular-nums">{item.qty}</span>
         <button
           onClick={() => isUnitLine ? handleAddLoose() : onUpdateQty(item.sku, item.mode, 1, item.subMode || '')}
           aria-label="Increase quantity"
-          className="w-6 h-6 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-green-50 hover:border-green-200 transition active:scale-90 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
-          <Plus size={11} className="text-gray-600" />
+          className="w-8 h-8 rounded-xl border border-gray-200 flex items-center justify-center hover:bg-green-50 hover:border-green-200 transition active:scale-90 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none">
+          <Plus size={12} className="text-gray-500" />
         </button>
       </div>
       <div className="text-right shrink-0 w-14">
-        <div className="text-xs font-black text-gray-900">{fmt(net)}</div>
+        <div className="text-sm font-black text-gray-900 tabular-nums">{fmt(net)}</div>
       </div>
       <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
         {!isUnitLine && (
@@ -505,22 +516,22 @@ export default function POS({ user, online, navigate }) {
   return (
     <div className="page-wrap">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-white shrink-0">
-        <div className="flex items-center gap-2 font-bold text-sm text-gray-900 flex-1 min-w-0">
-          <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0">
-            <ShoppingCart size={15} className="text-white" />
+      <div className="flex items-center gap-2 px-4 py-3 border-b bg-white shrink-0" style={{ borderColor: 'var(--surface-border)' }}>
+        <div className="flex items-center gap-2.5 font-bold text-sm text-gray-900 flex-1 min-w-0">
+          <div className="w-8 h-8 bg-brand-600 rounded-xl flex items-center justify-center shrink-0" style={{ boxShadow: 'var(--shadow-red)' }}>
+            <ShoppingCart size={15} className="text-white" aria-hidden="true" />
           </div>
-          <span className="truncate">Point of Sale</span>
-          {mode === 'quote' && <span className="badge-warning text-[10px] ml-1 shrink-0">QUOTE</span>}
+          <span className="truncate tracking-tight font-black">Point of Sale</span>
+          {mode === 'quote' && <span className="badge-warning text-[10px] ml-1 shrink-0 tracking-wide">QUOTE</span>}
         </div>
         <button onClick={() => setMode(m => m === 'sale' ? 'quote' : 'sale')}
           aria-label={`Switch to ${mode === 'quote' ? 'sale' : 'quote'} mode`}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition shrink-0 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none ${mode === 'quote' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition shrink-0 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none ${mode === 'quote' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
           <FileText size={12} aria-hidden="true" />{mode === 'quote' ? 'Quote' : 'Sale'}
         </button>
         <button onClick={vatToggle}
           aria-label={`VAT is ${vatEnabled ? 'on' : 'off'}, click to toggle`}
-          className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-semibold transition shrink-0 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none ${vatEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-semibold transition shrink-0 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none ${vatEnabled ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
           VAT {vatEnabled ? 'ON' : 'OFF'}
         </button>
         <div aria-label={online ? 'Online' : 'Offline'} role="status" className={`flex items-center gap-1 text-[10px] font-semibold shrink-0 ${online ? 'text-emerald-600' : 'text-amber-500'}`}>
@@ -531,7 +542,7 @@ export default function POS({ user, online, navigate }) {
       <div className="flex flex-1 overflow-hidden">
         {/* Products panel */}
         <div className={`flex flex-col ${view === 'cart' ? 'hidden md:flex' : 'flex'} flex-1 overflow-hidden min-w-0`}>
-          <div className="px-3 py-2 bg-white border-b border-gray-100 shrink-0">
+          <div className="px-3 py-2 bg-white shrink-0" style={{ borderBottom: '1px solid var(--surface-border)' }}>
             <div className="search-input-wrap">
               {lastScan
                 ? <ScanLine className="search-icon text-emerald-500" size={13} />
@@ -540,7 +551,7 @@ export default function POS({ user, online, navigate }) {
                 placeholder="Search or scan SKU…" autoComplete="off" aria-label="Search products"
                 className={`input py-2 text-xs transition-colors ${lastScan ? 'border-emerald-400 bg-emerald-50/60' : ''}`}
                 style={{paddingRight: search ? '2rem' : undefined}} />
-              {search && <button onClick={() => { handleSearchChange(''); setLastScan('') }} className="absolute right-3 top-1/2 -translate-y-1/2" style={{color:'var(--ink-tertiary)'}}><X size={13} /></button>}
+              {search && <button onClick={() => { handleSearchChange(''); setLastScan('') }} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded" style={{color:'var(--ink-tertiary)'}}><X size={13} aria-hidden="true" /></button>}
             </div>
             <div className="flex gap-1.5 overflow-x-auto no-scrollbar mt-2 pb-0.5">
               {categories.map(cat => (
@@ -554,8 +565,8 @@ export default function POS({ user, online, navigate }) {
           </div>
 
           {search && (
-            <div className="px-3 py-1.5 bg-blue-50 border-b border-blue-100 shrink-0">
-              <p className="text-[11px] text-blue-600 font-medium">
+            <div className="px-3 py-1.5 shrink-0" style={{ background: 'var(--surface-3)', borderBottom: '1px solid var(--surface-border)' }}>
+              <p className="text-[11px] font-semibold tabular-nums" style={{ color: 'var(--ink-tertiary)' }}>
                 {filteredProducts.length} of {products.length} products
               </p>
             </div>
@@ -563,12 +574,13 @@ export default function POS({ user, online, navigate }) {
 
           <div className="flex-1 overflow-y-auto p-3">
             {filteredProducts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 text-gray-400">
-                <Package size={32} className="mb-2 opacity-30" aria-hidden="true" />
-                <p className="text-sm font-medium">No products found</p>
+              <div className="flex flex-col items-center justify-center h-40" style={{ color: 'var(--ink-tertiary)' }}>
+                <Package size={36} className="mb-2.5 opacity-20" aria-hidden="true" />
+                <p className="text-sm font-semibold">No products found</p>
+                {search && <p className="text-xs mt-0.5 opacity-60">Try a different search term</p>}
               </div>
             ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
                 {filteredProducts.map(p => <ProductCard key={p.id} product={p} cart={cart} addedSku={addedSku} pressedSku={pressedSku} onPress={handleProductPress} />)}
               </div>
             )}
@@ -576,8 +588,8 @@ export default function POS({ user, online, navigate }) {
         </div>
 
         {/* Cart panel */}
-        <div className={`${view === 'products' ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-72 lg:w-80 xl:w-96 bg-white border-l border-gray-100 shrink-0 overflow-hidden`}>
-          <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-100 shrink-0">
+        <div className={`${view === 'products' ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-72 lg:w-80 xl:w-96 bg-white shrink-0 overflow-hidden`} style={{ borderLeft: '1px solid var(--surface-border)' }}>
+          <div className="flex items-center justify-between px-3 py-2.5 shrink-0" style={{ borderBottom: '1px solid var(--surface-border)' }}>
             <div className="flex items-center gap-2">
               <button className="md:hidden btn-ghost p-1.5 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none" aria-label="Back to products" onClick={() => setView('products')}>
                 <ArrowLeft size={16} aria-hidden="true" />
@@ -606,7 +618,7 @@ export default function POS({ user, online, navigate }) {
           </div>
 
           {/* Customer search with autocomplete */}
-          <div className="px-3 py-2 border-b border-gray-100 shrink-0 relative">
+          <div className="px-3 py-2 shrink-0 relative" style={{ borderBottom: '1px solid var(--surface-border)' }}>
             <div className="relative">
               <input value={customer || customerSearch}
                 onChange={e => handleCustomerInput(e.target.value)}
@@ -621,7 +633,7 @@ export default function POS({ user, online, navigate }) {
               )}
             </div>
             {customerSuggestions.length > 0 && (
-              <div className="absolute left-3 right-3 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden">
+              <div className="absolute left-3 right-3 top-full mt-1 bg-white rounded-xl z-20 overflow-hidden" style={{ border: '1px solid var(--surface-border-strong)', boxShadow: '0 8px 24px rgba(15,23,42,0.10)' }}>
                 {customerSuggestions.map(c => (
                   <button key={c.id} onClick={() => selectCustomer(c)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-gray-50 transition">
@@ -654,58 +666,58 @@ export default function POS({ user, online, navigate }) {
 
           <div className="flex-1 overflow-y-auto px-3 py-2 no-scrollbar">
             {cart.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-32 text-gray-300">
-                <ShoppingCart size={36} className="mb-2" />
-                <p className="text-xs font-medium">Tap a product to add it</p>
+              <div className="flex flex-col items-center justify-center h-32" style={{ color: 'var(--ink-tertiary)', opacity: 0.5 }}>
+                <ShoppingCart size={32} className="mb-2" aria-hidden="true" />
+                <p className="text-xs font-semibold">Tap a product to add it</p>
               </div>
             ) : cart.map(item => <CartRow key={`${item.sku}-${item.mode}-${item.subMode}`} item={item} products={products} onUpdateQty={updateQty} onRemove={removeFromCart} onOpenDiscount={openLineDiscount} onAddLoose={addLooseUnit} onToast={showToast} />)}
           </div>
 
           {saleDiscount > 0 && (
-            <div className="mx-3 mb-2 flex items-center justify-between px-3 py-2 bg-brand-50 rounded-xl border border-brand-100">
+            <div className="mx-3 mb-2 flex items-center justify-between px-3 py-2 bg-brand-50 rounded-xl" style={{ border: '1px solid var(--brand-100)' }}>
               <span className="text-xs font-semibold text-brand-700">Sale discount</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-brand-600">-{fmt(saleDiscount)}</span>
-                <button onClick={() => setSaleDiscount(0)} className="text-brand-400 hover:text-brand-700"><X size={12} /></button>
+                <span className="text-xs font-bold text-brand-600 tabular-nums">−{fmt(saleDiscount)}</span>
+                <button onClick={() => setSaleDiscount(0)} aria-label="Remove sale discount" className="text-brand-400 hover:text-brand-700 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded"><X size={12} aria-hidden="true" /></button>
               </div>
             </div>
           )}
 
           {cart.length > 0 && (
-            <div className="px-3 py-2.5 border-t border-gray-100 bg-gray-50 shrink-0 space-y-1">
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>Subtotal</span><span>{fmt(totals.subtotal)}</span>
+            <div className="px-3 py-2.5 border-t shrink-0 space-y-1.5" style={{ borderColor: 'var(--surface-border)', background: 'var(--surface-3)' }}>
+              <div className="flex justify-between text-xs" style={{ color: 'var(--ink-tertiary)' }}>
+                <span>Subtotal</span><span className="tabular-nums">{fmt(totals.subtotal)}</span>
               </div>
               {totals.lineDiscountTotal > 0 && (
                 <div className="flex justify-between text-xs text-brand-600">
-                  <span>Line discounts</span><span>-{fmt(totals.lineDiscountTotal)}</span>
+                  <span>Line discounts</span><span className="tabular-nums">−{fmt(totals.lineDiscountTotal)}</span>
                 </div>
               )}
               {totals.saleDiscount > 0 && (
                 <div className="flex justify-between text-xs text-brand-600">
-                  <span>Sale disc.</span><span>-{fmt(totals.saleDiscount)}</span>
+                  <span>Sale discount</span><span className="tabular-nums">−{fmt(totals.saleDiscount)}</span>
                 </div>
               )}
               {vatEnabled && (
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>VAT 15%</span><span>{fmt(totals.vatAmount)}</span>
+                <div className="flex justify-between text-xs" style={{ color: 'var(--ink-tertiary)' }}>
+                  <span>VAT 15%</span><span className="tabular-nums">{fmt(totals.vatAmount)}</span>
                 </div>
               )}
-              <div className="flex justify-between font-black text-base pt-1 border-t border-gray-200">
-                <span className="text-gray-900">TOTAL</span>
-                <span className="text-brand-600 tabular-nums">{fmt(totals.grandTotal)}</span>
+              <div className="flex justify-between items-baseline font-black pt-2 mt-1 border-t" style={{ borderColor: 'var(--surface-border-strong)' }}>
+                <span className="text-sm tracking-tight" style={{ color: 'var(--ink-primary)' }}>Total</span>
+                <span className="text-xl text-brand-600 tabular-nums">{fmt(totals.grandTotal)}</span>
               </div>
             </div>
           )}
 
-          <div className="px-3 py-3 border-t border-gray-100 shrink-0">
+          <div className="px-3 py-3 shrink-0" style={{ borderTop: '1px solid var(--surface-border)' }}>
             {mode === 'quote' ? (
               <button onClick={completeQuote} disabled={cart.length === 0} className="btn-primary w-full py-3 disabled:opacity-40">
                 <FileText size={16} />Generate Quote
               </button>
             ) : (
               <button onClick={() => { if (cart.length === 0) return; setPayments([{ method: 'cash', amount: String(totals.grandTotal) }]); setCheckoutModal(true) }}
-                disabled={cart.length === 0} className="btn-primary w-full py-3 text-sm disabled:opacity-40 shadow-md">
+                disabled={cart.length === 0} className="btn-primary w-full py-3 text-sm disabled:opacity-40">
                 <DollarSign size={16} />Checkout — {fmt(totals.grandTotal)}
               </button>
             )}
@@ -715,7 +727,8 @@ export default function POS({ user, online, navigate }) {
         {/* Mobile cart FAB */}
         {view === 'products' && cart.length > 0 && (
           <button onClick={() => setView('cart')}
-            className="md:hidden fixed bottom-20 right-4 z-30 flex items-center gap-2 px-4 py-3 bg-brand-600 text-white rounded-2xl shadow-lg font-bold text-sm motion-safe:animate-scale-in">
+            className="md:hidden fixed bottom-20 right-4 z-30 flex items-center gap-2 px-4 py-3 bg-brand-600 text-white rounded-2xl font-bold text-sm motion-safe:animate-scale-in"
+            style={{ boxShadow: '0 8px 24px rgba(220,38,38,0.35)' }}>
             <ShoppingCart size={16} />
             <span>{cartCount}</span>
             <span className="text-brand-200 font-medium">{fmt(totals.grandTotal)}</span>
@@ -819,8 +832,8 @@ export default function POS({ user, online, navigate }) {
               <button onClick={() => setHoldNameModal(false)} aria-label="Close" className="focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded-lg p-0.5"><X size={17} className="text-gray-400" aria-hidden="true" /></button>
             </div>
             <div className="p-4">
-              <label className="block text-xs font-medium text-gray-600 mb-2">Label (optional)</label>
-              <input value={holdNameInput} onChange={e => setHoldNameInput(e.target.value)} autoFocus
+              <label htmlFor="hold-name-input" className="block text-xs font-medium text-gray-600 mb-2">Label (optional)</label>
+              <input id="hold-name-input" value={holdNameInput} onChange={e => setHoldNameInput(e.target.value)} autoFocus
                 className="input mb-4" placeholder="Customer name or note…" />
               <div className="flex gap-2">
                 <button onClick={() => setHoldNameModal(false)} className="btn-secondary flex-1">Cancel</button>
@@ -852,8 +865,8 @@ export default function POS({ user, online, navigate }) {
                   aria-label="Customer name"
                   className="input text-sm" placeholder="Walk-in customer (type to search)" />
                 {customerSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 top-full mt-1 rounded-xl shadow-lg z-20 overflow-hidden"
-                    style={{background:'var(--surface-2)',border:'1px solid var(--surface-border-strong)'}}>
+                  <div className="absolute left-0 right-0 top-full mt-1 rounded-xl z-20 overflow-hidden"
+                    style={{background:'var(--surface-2)',border:'1px solid var(--surface-border-strong)',boxShadow:'0 8px 24px rgba(15,23,42,0.10)'}}>
                     {customerSuggestions.map(c => (
                       <button key={c.id} onClick={() => selectCustomer(c)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-left transition"
@@ -882,24 +895,27 @@ export default function POS({ user, online, navigate }) {
                 <div className="flex items-center justify-between mb-2">
                   <label className="text-xs font-semibold text-gray-600">Payments</label>
                   <button onClick={() => setPayments(p => [...p, { method: 'cash', amount: '' }])}
-                    className="text-xs text-brand-600 font-semibold hover:text-brand-700 flex items-center gap-1">
-                    <Plus size={12} />Split
+                    aria-label="Add split payment"
+                    className="text-xs text-brand-600 font-semibold hover:text-brand-700 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none rounded px-1">
+                    <Plus size={12} aria-hidden="true" />Split
                   </button>
                 </div>
                 <div className="space-y-2">
                   {payments.map((pmt, i) => (
                     <div key={i} className="flex gap-2 items-center">
                       <select value={pmt.method}
+                        aria-label={`Payment method ${i + 1}`}
                         onChange={e => setPayments(prev => prev.map((p, j) => j === i ? { ...p, method: e.target.value } : p))}
                         className="input py-2 text-sm flex-1">
                         {PAY_METHODS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
                       </select>
                       <input type="number" inputMode="decimal" min="0" step="0.01" value={pmt.amount}
+                        aria-label={`Payment amount ${i + 1}`}
                         onChange={e => setPayments(prev => prev.map((p, j) => j === i ? { ...p, amount: e.target.value } : p))}
                         className="input py-2 text-sm w-28" placeholder={fmt(totals.grandTotal)} />
                       {payments.length > 1 && (
-                        <button onClick={() => setPayments(p => p.filter((_, j) => j !== i))} className="text-gray-300 hover:text-red-400 transition p-1.5">
-                          <X size={14} />
+                        <button onClick={() => setPayments(p => p.filter((_, j) => j !== i))} aria-label="Remove payment" className="text-gray-300 hover:text-red-400 transition p-1.5 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none rounded">
+                          <X size={14} aria-hidden="true" />
                         </button>
                       )}
                     </div>
@@ -929,11 +945,11 @@ export default function POS({ user, online, navigate }) {
               <div className="rounded-xl border border-gray-200 overflow-hidden">
                 <div className="px-4 py-3 bg-gray-50 space-y-1.5">
                   <div className="flex justify-between text-xs text-gray-500">
-                    <span>Total due</span><span className="font-bold text-gray-900">{fmt(totals.grandTotal)}</span>
+                    <span>Total due</span><span className="font-bold text-gray-900 tabular-nums">{fmt(totals.grandTotal)}</span>
                   </div>
                   <div className="flex justify-between text-xs text-gray-500">
                     <span>Amount tendered</span>
-                    <span className={`font-bold ${totalPaid >= totals.grandTotal ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    <span className={`font-bold tabular-nums ${totalPaid >= totals.grandTotal ? 'text-emerald-600' : 'text-amber-600'}`}>
                       {fmt(totalPaid)}
                     </span>
                   </div>
@@ -943,11 +959,11 @@ export default function POS({ user, online, navigate }) {
                   <div className="px-4 py-3 bg-emerald-50 border-t border-emerald-100 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-bold text-emerald-800">Change owed</span>
-                      <span className="text-xl font-black text-emerald-700">{fmt(changeOwed)}</span>
+                      <span className="text-xl font-black text-emerald-700 tabular-nums">{fmt(changeOwed)}</span>
                     </div>
                     <div>
-                      <label className="block text-[10px] text-emerald-700 font-semibold mb-1">Change actually given</label>
-                      <input type="number" inputMode="decimal" min="0" max={changeOwed} step="0.01"
+                      <label htmlFor="change-given-input" className="block text-[10px] text-emerald-700 font-semibold mb-1">Change actually given</label>
+                      <input id="change-given-input" type="number" inputMode="decimal" min="0" max={changeOwed} step="0.01"
                         value={changeActuallyGiven}
                         onChange={e => setChangeActuallyGiven(e.target.value)}
                         className="input text-sm py-1.5"
@@ -956,7 +972,7 @@ export default function POS({ user, online, navigate }) {
                     {changeStillOwed > 0 && (
                       <div className="flex items-center justify-between px-3 py-2 bg-amber-50 rounded-lg border border-amber-100">
                         <span className="text-xs font-semibold text-amber-800">Still owed to customer</span>
-                        <span className="text-sm font-black text-amber-700">{fmt(changeStillOwed)}</span>
+                        <span className="text-sm font-black text-amber-700 tabular-nums">{fmt(changeStillOwed)}</span>
                       </div>
                     )}
                     {changeStillOwed > 0 && !customer.trim() && (
@@ -974,7 +990,7 @@ export default function POS({ user, online, navigate }) {
                   <div className="px-4 py-3 bg-amber-50 border-t border-amber-100">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-bold text-amber-800">Amount owing</span>
-                      <span className="text-xl font-black text-amber-700">{fmt(amountOwing)}</span>
+                      <span className="text-xl font-black text-amber-700 tabular-nums">{fmt(amountOwing)}</span>
                     </div>
                     <p className="text-[10px] text-amber-600 mt-1">Will be tracked in Change & Credit</p>
                   </div>

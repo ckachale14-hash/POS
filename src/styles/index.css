@@ -168,12 +168,12 @@ html, body, #root {
 
   /* Product cards */
   .product-card {
-    @apply rounded-2xl p-3 flex flex-col border cursor-pointer select-none;
+    @apply rounded-2xl p-3.5 flex flex-col border cursor-pointer select-none;
     background: var(--surface-1);
     border-color: var(--surface-border);
     box-shadow: var(--shadow-sm);
-    min-height: 110px;
-    transition: all 0.15s var(--ease-smooth);
+    min-height: 120px;
+    transition: border-color 0.15s var(--ease-smooth), box-shadow 0.15s var(--ease-smooth), transform 0.15s var(--ease-smooth);
   }
 
   /* Cart items */
@@ -184,10 +184,11 @@ html, body, #root {
   /* Category chips */
   .cat-chip {
     @apply flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold
-           transition-all duration-150 whitespace-nowrap;
+           transition-all duration-200 whitespace-nowrap;
+    letter-spacing: 0.01em;
   }
-  .cat-chip-active   { background: var(--brand-600); color: white; }
-  .cat-chip-inactive { background: var(--surface-3); color: var(--ink-secondary); border: 1px solid var(--surface-border); }
+  .cat-chip-active   { background: var(--brand-600); color: white; box-shadow: 0 2px 8px rgba(220,38,38,0.25); }
+  .cat-chip-inactive { background: var(--surface-3); color: var(--ink-tertiary); }
   .cat-chip-inactive:hover { background: var(--surface-4); color: var(--ink-primary); }
 
   /* Modals */
