@@ -75,7 +75,7 @@ const ProductCard = React.memo(function ProductCard({
         isOut ? 'opacity-40 cursor-not-allowed bg-gray-50'
           : isPressed ? 'scale-[0.97] shadow-inner'
           : isAdded ? 'border-brand-300 bg-brand-50/30'
-          : 'hover:border-brand-200 hover:shadow-[0_4px_16px_rgba(220,38,38,0.10)] hover:-translate-y-0.5 cursor-pointer'
+          : 'hover:border-brand-200 hover:shadow-[0_4px_16px_rgba(255,56,48,0.10)] hover:-translate-y-0.5 cursor-pointer'
       } focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none`}
     >
       {/* Stock badge — top right */}
@@ -745,7 +745,7 @@ export default function POS({ user, online, navigate }) {
         {view === 'products' && cart.length > 0 && (
           <button onClick={() => setView('cart')}
             className="md:hidden fixed bottom-20 right-4 z-30 flex items-center gap-2 px-4 py-3 bg-brand-600 text-white rounded-2xl font-bold text-sm motion-safe:animate-scale-in"
-            style={{ boxShadow: '0 8px 24px rgba(220,38,38,0.35)' }}>
+            style={{ boxShadow: '0 8px 24px rgba(255,56,48,0.35)' }}>
             <ShoppingCart size={16} />
             <span>{cartCount}</span>
             <span className="text-brand-200 font-medium">{fmt(totals.grandTotal)}</span>
