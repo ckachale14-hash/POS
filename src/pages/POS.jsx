@@ -896,7 +896,7 @@ export default function POS({ user, online, navigate }) {
                         onMouseEnter={e=>e.currentTarget.style.background='var(--surface-3)'}
                         onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                         <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 uppercase"
-                          style={{background:'rgba(220,38,38,0.15)',color:'var(--brand-400)'}}>
+                          style={{background:'rgba(255,56,48,0.15)',color:'var(--brand-400)'}}>
                           {c.name[0]}
                         </div>
                         <div className="min-w-0">

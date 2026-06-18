@@ -147,7 +147,7 @@ function MobileBottomNav({ allowed, page, navigate }) {
                       display: 'flex', alignItems: 'center', gap: 12,
                       padding: '11px 14px',
                       borderRadius: 12,
-                      background: active ? 'rgba(220,38,38,0.08)' : 'transparent',
+                      background: active ? 'rgba(255,56,48,0.08)' : 'transparent',
                       color: active ? 'var(--brand-600)' : 'var(--ink-primary)',
                       fontWeight: active ? 700 : 500,
                       fontSize: 14,
@@ -246,7 +246,7 @@ export default function AppShell({ user, online, page, navigate, onLogout, child
       <div className="p-3 shrink-0" style={{ borderTop: '1px solid var(--surface-border)' }}>
         <div className="flex items-center gap-2 px-2 py-1.5 rounded-xl mb-2">
           <div className="w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shrink-0 uppercase"
-            style={{ background: 'rgba(220,38,38,0.15)', color: 'var(--brand-400)' }}>
+            style={{ background: 'rgba(255,56,48,0.15)', color: 'var(--brand-400)' }}>
             {user?.name?.[0]}
           </div>
           <div className="min-w-0 flex-1">
@@ -265,7 +265,7 @@ export default function AppShell({ user, online, page, navigate, onLogout, child
         <button onClick={onLogout}
           className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs font-medium transition-all duration-150"
           style={{ color: 'var(--ink-tertiary)' }}
-          onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(220,38,38,0.08)' }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(255,56,48,0.08)' }}
           onMouseLeave={e => { e.currentTarget.style.color = 'var(--ink-tertiary)'; e.currentTarget.style.background = 'transparent' }}
         >
           <LogOut size={14} />Logout

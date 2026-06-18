@@ -231,7 +231,7 @@ export default function SessionHUD({ navigate, currentPage }) {
                             <button onClick={() => removeFromCart(item.sku, item.mode)}
                               className="w-6 h-6 rounded-md flex items-center justify-center ml-1 transition"
                               style={{ color: '#f87171' }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,38,38,0.1)'}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,56,48,0.1)'}
                               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                               <Trash2 size={10} />
                             </button>
@@ -282,7 +282,7 @@ export default function SessionHUD({ navigate, currentPage }) {
                       <button key={held.id} onClick={() => resumeHeld(held)}
                         className="w-full flex items-start gap-3 p-3 rounded-xl text-left group transition"
                         style={{ background: 'var(--surface-3)', border: '1px solid var(--surface-border)' }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brand-600)'; e.currentTarget.style.background = 'rgba(220,38,38,0.06)' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--brand-600)'; e.currentTarget.style.background = 'rgba(255,56,48,0.06)' }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--surface-border)'; e.currentTarget.style.background = 'var(--surface-3)' }}
                       >
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"

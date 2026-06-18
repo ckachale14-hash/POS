@@ -87,7 +87,7 @@ function LockScreen({ user, onUnlock }) {
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       gap: 24, padding: 32,
     }}>
-      <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(220,38,38,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 52, height: 52, borderRadius: 16, background: 'rgba(255,56,48,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ fontSize: 22 }}>🔒</span>
       </div>
       <div style={{ textAlign: 'center' }}>

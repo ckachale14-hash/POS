@@ -54,7 +54,7 @@ function AnimatedNumber({ value, prefix = '', decimals = 2 }) {
 }
 
 // Premium bar chart — inline SVG with tooltips
-function BarChart({ data, valueKey = 'value', labelKey = 'label', color = '#dc2626', height = 120 }) {
+function BarChart({ data, valueKey = 'value', labelKey = 'label', color = '#e11d15', height = 120 }) {
   if (!data || data.length === 0) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height, color: 'var(--ink-tertiary)', fontSize: 11 }}>No data</div>
   )
@@ -86,7 +86,7 @@ function DonutChart({ data }) {
   if (!data || data.length === 0) return null
   const total = data.reduce((a, d) => a + d.value, 0)
   if (total === 0) return null
-  const COLORS = ['#dc2626', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6']
+  const COLORS = ['#e11d15', '#10b981', '#3b82f6', '#f59e0b', '#8b5cf6']
   let cumPct = 0
   const r = 38, cx = 50, cy = 50, strokeWidth = 16
   const circumference = 2 * Math.PI * r
@@ -136,7 +136,7 @@ function DonutChart({ data }) {
 }
 
 // Double-bezel KPI card (from high-end-ui)
-function KpiCard({ title, value, prefix = '$', decimals = 2, color = '#dc2626', bg = 'rgba(220,38,38,0.1)', Icon, sub }) {
+function KpiCard({ title, value, prefix = '$', decimals = 2, color = '#e11d15', bg = 'rgba(255,56,48,0.1)', Icon, sub }) {
   const [hovered, setHovered] = useState(false)
   return (
     <div
@@ -412,7 +412,7 @@ export default function SalesHistory({ user }) {
           ))}
           {(dateFrom || dateTo) && (
             <button onClick={() => { setDateFrom(''); setDateTo(''); setActivePreset('') }}
-              className="cat-chip shrink-0 cat-chip-inactive" style={{ color: '#dc2626' }}>
+              className="cat-chip shrink-0 cat-chip-inactive" style={{ color: 'var(--brand-600)' }}>
               <X size={9} style={{ display: 'inline', marginRight: 2 }} />Clear
             </button>
           )}
@@ -471,7 +471,7 @@ export default function SalesHistory({ user }) {
           {/* KPI bento grid — asymmetric */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <KpiCard title="Total Revenue" value={totals.revenue} prefix="$" Icon={DollarSign} color="#dc2626" bg="rgba(220,38,38,0.1)"
+              <KpiCard title="Total Revenue" value={totals.revenue} prefix="$" Icon={DollarSign} color="#e11d15" bg="rgba(255,56,48,0.1)"
                 sub={`${totals.count} transaction${totals.count !== 1 ? 's' : ''}`} />
             </div>
             <KpiCard title="Average Sale" value={totals.avgSale} prefix="$" Icon={TrendingUp} color="#10b981" bg="rgba(16,185,129,0.1)" />
@@ -482,7 +482,7 @@ export default function SalesHistory({ user }) {
           <SectionCard>
             <CardTitle title="Daily Revenue" sub={`Last ${Math.min(dailyData.length, 14)} days`} />
             {dailyData.length > 0
-              ? <BarChart data={dailyData} valueKey="value" labelKey="label" color="#dc2626" height={110} />
+              ? <BarChart data={dailyData} valueKey="value" labelKey="label" color="#e11d15" height={110} />
               : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 110, color: 'var(--ink-tertiary)', fontSize: 11 }}>No sales in this period</div>
             }
           </SectionCard>
@@ -654,7 +654,7 @@ export default function SalesHistory({ user }) {
 
           {marginDim === 'overall' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <KpiCard title="Total Revenue" value={marginData.totalRevenue} prefix="$" Icon={DollarSign} color="#dc2626" bg="rgba(220,38,38,0.1)" />
+              <KpiCard title="Total Revenue" value={marginData.totalRevenue} prefix="$" Icon={DollarSign} color="#e11d15" bg="rgba(255,56,48,0.1)" />
               <KpiCard title="Total Cost" value={marginData.totalCost} prefix="$" Icon={Package} color="#6b7280" bg="rgba(107,114,128,0.1)" />
               <KpiCard title="Gross Profit" value={marginData.totalProfit} prefix="$" Icon={TrendingUp}
                 color={marginData.totalProfit >= 0 ? '#10b981' : '#ef4444'}
@@ -670,7 +670,7 @@ export default function SalesHistory({ user }) {
               {marginData.catRows.length > 0 && (
                 <SectionCard>
                   <CardTitle title="Revenue by Category" />
-                  <BarChart data={marginData.catRows.map(r => ({ label: r.name.split(' ')[0], value: r.revenue }))} height={90} color="#dc2626" />
+                  <BarChart data={marginData.catRows.map(r => ({ label: r.name.split(' ')[0], value: r.revenue }))} height={90} color="#e11d15" />
                 </SectionCard>
               )}
               <div style={{ overflowX: 'auto', minWidth: 0 }}>

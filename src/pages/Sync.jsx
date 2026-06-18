@@ -384,7 +384,7 @@ export default function Sync({ user, online }) {
               [RefreshCw,   '#3b82f6', 'rgba(59,130,246,0.1)', 'Offline changes queue locally and sync automatically on reconnect'],
               [Zap,         '#f59e0b', 'rgba(245,158,11,0.1)', 'Auto-sync runs every 2 minutes when online (no action needed)'],
               [Shield,      '#8b5cf6', 'rgba(139,92,246,0.1)', 'Duplicate records are detected and skipped, not duplicated'],
-              [AlertTriangle,'#dc2626','rgba(220,38,38,0.1)',  'Stock discrepancies between devices show as alerts here'],
+              [AlertTriangle,'#ef4444','rgba(239,68,68,0.1)',  'Stock discrepancies between devices show as alerts here'],
             ].map(([Icon, color, bg, text], i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                 <div style={{ width: 26, height: 26, borderRadius: 8, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>

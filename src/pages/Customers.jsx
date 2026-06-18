@@ -418,7 +418,7 @@ export default function Customers({ user, navigate }) {
                 className="card w-full p-3.5 text-left hover:shadow-md hover:-translate-y-0.5 transition-all duration-150 active:scale-[0.98] group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 uppercase" style={{background:"rgba(220,38,38,0.15)",color:"var(--brand-400)"}}>
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0 uppercase" style={{background:"rgba(255,56,48,0.15)",color:"var(--brand-400)"}}>
                     {c.name?.[0]}
                   </div>
                   <div className="flex-1 min-w-0">

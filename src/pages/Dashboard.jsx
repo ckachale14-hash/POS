@@ -42,7 +42,7 @@ function AnimatedNumber({ value, prefix = '', decimals = 2 }) {
   return <>{prefix}{decimals > 0 ? displayed.toFixed(decimals) : Math.round(displayed)}</>
 }
 
-function KpiCard({ title, value, sub, icon: Icon, color = '#dc2626', bg = 'rgba(220,38,38,0.1)', prefix = '$', decimals = 2, large = false }) {
+function KpiCard({ title, value, sub, icon: Icon, color = '#e11d15', bg = 'rgba(255,56,48,0.1)', prefix = '$', decimals = 2, large = false }) {
   const [hovered, setHovered] = useState(false)
   return (
     <div
@@ -357,7 +357,7 @@ export default function Dashboard({ user, navigate }) {
             {/* KPI cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
               <div style={{ gridColumn: '1 / -1' }}>
-                <KpiCard large title="Total Revenue" value={data.revenue} icon={DollarSign} color="#dc2626" bg="rgba(220,38,38,0.1)" sub={`${data.txCount} transaction${data.txCount !== 1 ? 's' : ''}`} prefix="$" />
+                <KpiCard large title="Total Revenue" value={data.revenue} icon={DollarSign} color="#e11d15" bg="rgba(255,56,48,0.1)" sub={`${data.txCount} transaction${data.txCount !== 1 ? 's' : ''}`} prefix="$" />
               </div>
               <KpiCard title="Transactions" value={data.txCount} icon={ShoppingBag} color="#3b82f6" bg="rgba(59,130,246,0.1)" prefix="" decimals={0} />
               <KpiCard title="Avg Sale" value={data.avgSale} icon={TrendingUp} color="#10b981" bg="rgba(16,185,129,0.1)" prefix="$" />
@@ -391,7 +391,7 @@ export default function Dashboard({ user, navigate }) {
                     return (
                       <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                         <div
-                          style={{ width: '100%', height: h, borderRadius: 4, background: d.isToday ? 'var(--brand-600)' : 'rgba(220,38,38,0.2)', transition: 'height 600ms cubic-bezier(0.16,1,0.3,1)' }}
+                          style={{ width: '100%', height: h, borderRadius: 4, background: d.isToday ? 'var(--brand-600)' : 'rgba(255,56,48,0.2)', transition: 'height 600ms cubic-bezier(0.16,1,0.3,1)' }}
                           title={fmt(d.value)}
                         />
                         <span style={{ fontSize: 8, fontWeight: 700, color: d.isToday ? 'var(--brand-600)' : 'var(--ink-tertiary)' }}>{d.label}</span>
