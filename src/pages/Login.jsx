@@ -46,7 +46,7 @@ export default function Login({ onLogin, online }) {
 
   const roleColor = r =>
     r === 'admin'   ? 'bg-red-100 text-red-700' :
-    r === 'manager' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+    r === 'manager' ? 'bg-accent-100 text-accent-700' : 'bg-gray-100 text-gray-600'
 
   const KEYS = ['1','2','3','4','5','6','7','8','9','C','0','back']
 

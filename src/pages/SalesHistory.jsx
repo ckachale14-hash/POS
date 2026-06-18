@@ -12,7 +12,7 @@ import Receipt from '../components/Receipt.jsx'
 const PAY_CONFIG = {
   cash:    { color: '#10b981', bg: 'rgba(16,185,129,0.12)',  label: 'Cash',    Icon: Banknote },
   ecocash: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'EcoCash', Icon: Smartphone },
-  swipe:   { color: '#3b82f6', bg: 'rgba(59,130,246,0.12)', label: 'Swipe',   Icon: CreditCard },
+  swipe:   { color: '#1e5bff', bg: 'rgba(30,91,255,0.12)', label: 'Swipe',   Icon: CreditCard },
   invoice: { color: '#8b5cf6', bg: 'rgba(139,92,246,0.12)', label: 'Invoice', Icon: FileCheck },
 }
 
@@ -384,7 +384,7 @@ export default function SalesHistory({ user }) {
   const PAY_COLOR_BADGE = {
     cash:    { color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
     ecocash: { color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
-    swipe:   { color: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
+    swipe:   { color: '#1e5bff', bg: 'rgba(30,91,255,0.1)' },
     invoice: { color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
   }
 

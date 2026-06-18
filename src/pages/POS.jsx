@@ -107,8 +107,8 @@ const ProductCard = React.memo(function ProductCard({
             Box <span className="font-semibold text-gray-500 tabular-nums">{fmt(product.boxPrice)}</span>
           </div>
         )}
-        <div className="text-[10px] text-gray-400">
-          WS <span className="font-semibold text-gray-500 tabular-nums">{fmt(product.wholesalePrice)}</span>
+        <div className="text-[10px] text-accent-600">
+          WS <span className="font-semibold tabular-nums">{fmt(product.wholesalePrice)}</span>
         </div>
       </div>
       {/* SKU — bottom, tertiary */}
@@ -133,10 +133,10 @@ const CartRow = React.memo(function CartRow({
   }
 
   return (
-    <div className={`cart-item group ${isUnitLine ? 'pl-3 border-l-2 border-blue-100' : ''}`}>
+    <div className={`cart-item group ${isUnitLine ? 'pl-3 border-l-2 border-accent-200' : ''}`}>
       <div className="flex-1 min-w-0">
         {isUnitLine
-          ? <p className="text-[10px] text-blue-600 font-semibold leading-tight">+ Loose units</p>
+          ? <p className="text-[10px] text-accent-600 font-semibold leading-tight">+ Loose units</p>
           : <p className="text-xs font-semibold text-gray-900 leading-tight truncate">{item.name}</p>}
         <p className="text-[10px] text-gray-400 mt-0.5">{item.label} · {fmt(item.unitPrice)}/ea</p>
         {(item.lineDiscount || 0) > 0 && (
@@ -778,14 +778,14 @@ export default function POS({ user, online, navigate }) {
                 </button>
               )}
               <button onClick={() => handleAddWithMode(priceModal, 'wholesale')}
-                className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-blue-400 hover:bg-blue-50 transition active:scale-95">
+                className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-accent-400 hover:bg-accent-50 transition active:scale-95">
                 <div className="text-left">
                   <p className="font-bold text-sm text-gray-900">Wholesale</p>
                   <p className="text-xs text-gray-400">
                     {priceModal.productType === 'set' ? 'Trade price per set' : priceModal.productType === 'piece' ? 'Trade price each' : 'Trade price'}
                   </p>
                 </div>
-                <span className="text-xl font-black text-blue-600 tabular-nums">{fmt(priceModal.wholesalePrice)}</span>
+                <span className="text-xl font-black text-accent-600 tabular-nums">{fmt(priceModal.wholesalePrice)}</span>
               </button>
               <button onClick={() => handleAddWithMode(priceModal, 'retail')}
                 className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-emerald-400 hover:bg-emerald-50 transition active:scale-95">
