@@ -3,6 +3,7 @@ import { db, seedIfEmpty, getSetting } from './lib/db'
 import { INITIAL_INVENTORY, INITIAL_USERS } from './data/initial-inventory'
 import { SessionProvider } from './context/SessionContext'
 import { startAutoSync, stopAutoSync } from './lib/sync'
+import { loadAndApplyTheme } from './lib/theme'
 import Login from './pages/Login.jsx'
 import POS from './pages/POS.jsx'
 import Dashboard from './pages/Dashboard.jsx'
@@ -56,6 +57,10 @@ const DEFAULT_SETTINGS = {
   receipt_footer_text:           'Thank you for shopping with us!\nGoods sold are not returnable.',
   whatsapp_show_logo:            false,
   whatsapp_show_cashier:         true,
+  theme_accent:                  'red',
+  theme_accent_hex:              '#ff3830',
+  theme_background:              'cloud',
+  theme_sidebar:                 'dark',
 }
 
 // ── Lock screen ───────────────────────────────────────────────────────────
@@ -167,6 +172,9 @@ export default function App() {
   useEffect(() => {
     ;(async () => {
       await seedIfEmpty(INITIAL_INVENTORY, INITIAL_USERS, DEFAULT_SETTINGS)
+
+      // Apply the saved appearance theme (accent + background) before first paint
+      await loadAndApplyTheme()
 
       // Restore session: only if the current WebView/browser session is still
       // alive (sessionStorage flag) AND a saved user exists in localStorage.

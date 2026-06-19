@@ -307,7 +307,7 @@ export default function AppShell({ user, online, page, navigate, onLogout, child
         </div>
 
         {/* Page content */}
-        <main className="flex-1 overflow-hidden" style={{ background: 'var(--surface-0)' }}>
+        <main className="flex-1 overflow-hidden app-canvas">
           {children}
         </main>
 

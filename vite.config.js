@@ -13,6 +13,11 @@ export default defineConfig({
         // Cache every built asset on install
         globPatterns: ['**/*.{js,css,html,ico,png,jpg,svg,woff2}'],
 
+        // Take control immediately so a new deploy's assets replace the old
+        // cache on the next load instead of waiting for every tab to close
+        skipWaiting: true,
+        clientsClaim: true,
+
         // Serve index.html from SW cache for all navigation requests.
         // This makes the SPA load instantly on return visits and work fully
         // offline (the service worker intercepts / and serves cached index.html
@@ -54,7 +59,7 @@ export default defineConfig({
         name: 'PortionSpot POS',
         short_name: 'PortionSpot',
         description: 'Point of Sale System',
-        theme_color: '#DC2626',
+        theme_color: '#FF3830',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'any',

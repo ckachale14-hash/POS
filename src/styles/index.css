@@ -41,6 +41,17 @@
   --surface-border: rgba(15,23,42,0.08);
   --surface-border-strong: rgba(15,23,42,0.14);
 
+  /* App canvas — the painted area behind the cards. Defaults to surface-0 but
+     the Appearance theme can swap it for a tint or gradient. Kept as its own
+     token so a gradient never leaks into solid-surface components. */
+  --app-canvas: var(--surface-0);
+
+  /* Brand channel + sidebar tokens are overridden at runtime by the theme
+     engine (src/lib/theme.js); these are the defaults. */
+  --brand-rgb: 255, 56, 48;
+  --nav-bg: #111827;
+  --nav-ink: #f9fafb;
+
   --ink-primary: #111827;
   --ink-secondary: #4b5563;
   --ink-tertiary: #6b7280;
@@ -386,8 +397,8 @@ html, body, #root {
 
 /* ── Dark sidebar nav ────────────────────────────────────────────────────── */
 .nav-sidebar {
-  background: #111827;
-  color: #f9fafb;
+  background: var(--nav-bg);
+  color: var(--nav-ink);
   border-right: 1px solid rgba(255,255,255,0.06);
 }
 .nav-item-active {
@@ -400,6 +411,15 @@ html, body, #root {
 
 /* ── App background ──────────────────────────────────────────────────────── */
 .app-bg { background: var(--surface-0); }
+
+/* App canvas — page area behind cards. Carries solid colors or gradients from
+   the Appearance theme. `main` is a non-scrolling container (inner pages own
+   their own scroll), so no fixed attachment is needed — avoids iOS/Android
+   repaint jank. */
+.app-canvas {
+  background: var(--app-canvas, var(--surface-0));
+  transition: background-color 0.3s var(--ease-smooth);
+}
 
 /* ── PC-specific layout improvements ────────────────────────────────────── */
 @media (hover: hover) and (pointer: fine) {

@@ -2,11 +2,16 @@ import React, { useState, useEffect, useRef } from 'react'
 import {
   Store, User, Percent, Printer, AlertTriangle, Image, ReceiptText,
   ShoppingCart, TrendingUp, Plus, Edit2, Trash2, Save, X, Eye, EyeOff,
-  Bluetooth, BluetoothSearching, CheckCircle2, Upload, Wifi, Lock, ScrollText, Shield
+  Bluetooth, BluetoothSearching, CheckCircle2, Upload, Wifi, Lock, ScrollText, Shield,
+  Palette, Check, RotateCcw
 } from 'lucide-react'
 import { db, getSetting, setSetting, saveSetting, getAllUsers, logAudit } from '../lib/db'
 import { useSession } from '../context/SessionContext'
 import { fmt } from '../lib/utils'
+import {
+  ACCENT_PRESETS, BACKGROUND_PRESETS, SIDEBAR_PRESETS, DEFAULT_THEME,
+  buildRamp, rgbString, applyTheme, getTheme, saveTheme,
+} from '../lib/theme'
 
 const PAGES_OPTIONS = [
   { id: 'pos',          label: 'Point of Sale' },
@@ -26,6 +31,7 @@ export default function Settings({ user }) {
 
   const tabs = [
     { id: 'shop',     label: 'Shop',     icon: Store },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'logo',     label: 'Logo',     icon: Image },
     { id: 'receipt',  label: 'Receipt',  icon: ReceiptText },
     { id: 'users',    label: 'Users',    icon: User },
@@ -63,6 +69,7 @@ export default function Settings({ user }) {
 
       <div className="flex-1 overflow-y-auto p-4">
         {tab === 'shop'    && <ShopTab showToast={showToast} />}
+        {tab === 'appearance' && <AppearanceTab showToast={showToast} />}
         {tab === 'logo'    && <LogoTab showToast={showToast} />}
         {tab === 'receipt' && <ReceiptTab showToast={showToast} />}
         {tab === 'users'   && <UsersTab showToast={showToast} currentUser={user} />}
@@ -153,6 +160,211 @@ function ShopTab({ showToast }) {
       </Field>
       <button onClick={save} className="btn-primary w-full mt-2"><Save size={14} />Save Changes</button>
     </Section>
+  )
+}
+
+// ── Appearance ─────────────────────────────────────────────────────────────
+// Colors + backgrounds are applied live as the admin picks, for instant
+// feedback across the whole app. Choices are only persisted on Save; navigating
+// away without saving reverts to the last saved theme.
+function AppearanceTab({ showToast }) {
+  const [draft, setDraft]         = useState(DEFAULT_THEME)
+  const [customHex, setCustomHex] = useState(DEFAULT_THEME.accentHex)
+  const [loaded, setLoaded]       = useState(false)
+  const savedRef = useRef(DEFAULT_THEME)
+
+  useEffect(() => {
+    getTheme().then(t => {
+      savedRef.current = t
+      setDraft(t)
+      if (t.accent === 'custom') setCustomHex(t.accentHex || DEFAULT_THEME.accentHex)
+      setLoaded(true)
+    })
+    // Discard any unsaved live preview when leaving the tab/page.
+    return () => applyTheme(savedRef.current)
+  }, [])
+
+  const apply = (next) => { setDraft(next); applyTheme({ ...next, accentHex: customHex }) }
+
+  const pickAccent = (id)       => apply({ ...draft, accent: id })
+  const pickCustom = (hex)      => { setCustomHex(hex); const next = { ...draft, accent: 'custom', accentHex: hex }; setDraft(next); applyTheme(next) }
+  const pickBackground = (id)   => apply({ ...draft, background: id })
+  const pickSidebar = (id)      => apply({ ...draft, sidebar: id })
+
+  const effectiveHex = draft.accent === 'custom'
+    ? customHex
+    : (ACCENT_PRESETS.find(p => p.id === draft.accent)?.hex || DEFAULT_THEME.accentHex)
+  const ramp = buildRamp(effectiveHex)
+
+  const save = async () => {
+    const t = { ...draft, accentHex: customHex }
+    await saveTheme(t)
+    savedRef.current = t
+    showToast('Appearance saved')
+  }
+
+  const reset = () => {
+    setCustomHex(DEFAULT_THEME.accentHex)
+    apply(DEFAULT_THEME)
+    showToast('Reset to default. Tap Save to keep.', 'info')
+  }
+
+  if (!loaded) return <div className="h-40 rounded-2xl bg-gray-100 animate-pulse" />
+
+  return (
+    <>
+      {/* Live preview */}
+      <Section title="Live Preview" desc="This updates instantly as you choose. Changes apply everywhere only after you Save.">
+        <div
+          className="rounded-2xl p-4 border"
+          style={{ background: BACKGROUND_PRESETS.find(b => b.id === draft.background)?.canvas, borderColor: 'var(--surface-border)' }}
+        >
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-[10px] text-white shrink-0"
+              style={{ background: ramp[600], boxShadow: `0 8px 20px rgba(${rgbString(ramp[600])}, 0.22)` }}>
+              PSM
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="h-2.5 w-24 rounded-full" style={{ background: ramp[600] }} />
+              <div className="h-2 w-16 rounded-full mt-1.5" style={{ background: 'var(--surface-4)' }} />
+            </div>
+          </div>
+          <div className="flex gap-1.5 mb-3 flex-wrap">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold text-white" style={{ background: ramp[600] }}>Oils</span>
+            <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: ramp[50], color: ramp[700] }}>Filters</span>
+            <span className="px-3 py-1 rounded-full text-xs font-semibold" style={{ background: 'var(--surface-3)', color: 'var(--ink-tertiary)' }}>Brakes</span>
+          </div>
+          <div className="flex gap-2">
+            <button className="flex-1 py-2.5 rounded-xl font-semibold text-sm text-white" style={{ background: ramp[600] }}>Charge $42.00</button>
+            <button className="px-4 py-2.5 rounded-xl font-semibold text-sm" style={{ background: ramp[50], color: ramp[700] }}>Hold</button>
+          </div>
+        </div>
+      </Section>
+
+      {/* Accent color */}
+      <Section title="Accent Color" desc="Drives buttons, highlights, active tabs and the brand badge across the whole app.">
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+          {ACCENT_PRESETS.map(p => {
+            const active = draft.accent === p.id
+            return (
+              <button
+                key={p.id}
+                onClick={() => pickAccent(p.id)}
+                aria-pressed={active}
+                title={p.name}
+                className="group flex flex-col items-center gap-1.5 rounded-xl p-1.5 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                style={active ? { boxShadow: `0 0 0 2px white, 0 0 0 4px ${p.hex}` } : undefined}
+              >
+                <span
+                  className="w-full aspect-square rounded-xl flex items-center justify-center transition-transform group-active:scale-95"
+                  style={{ background: p.hex }}
+                >
+                  {active && <Check size={18} className="text-white" strokeWidth={3} aria-hidden="true" />}
+                </span>
+                <span className="text-[10px] font-semibold truncate w-full text-center" style={{ color: active ? 'var(--ink-primary)' : 'var(--ink-tertiary)' }}>
+                  {p.name}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <label className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-700">Custom color</p>
+              <p className="text-[10px] text-gray-400">Pick any shade. The full tint range is generated for you.</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <input
+                value={customHex.toUpperCase()}
+                onChange={e => { const v = e.target.value; if (/^#?[0-9a-fA-F]{0,6}$/.test(v.replace('#',''))) pickCustom(v.startsWith('#') ? v : '#' + v) }}
+                className="input text-sm font-mono w-24 text-center"
+                placeholder="#FF3830"
+                maxLength={7}
+                inputMode="text"
+                spellCheck={false}
+                autoComplete="off"
+                aria-label="Custom accent hex code"
+              />
+              <input
+                type="color"
+                value={customHex}
+                onChange={e => pickCustom(e.target.value)}
+                aria-label="Custom accent color picker"
+                style={{ touchAction: 'manipulation' }}
+                className={`w-11 h-11 rounded-xl border-2 cursor-pointer bg-transparent p-0 ${draft.accent === 'custom' ? 'border-gray-900' : 'border-gray-200'}`}
+              />
+            </div>
+          </label>
+        </div>
+      </Section>
+
+      {/* Background */}
+      <Section title="Background" desc="The canvas behind your cards. Designed to stay easy on the eyes during long shifts.">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          {BACKGROUND_PRESETS.map(b => {
+            const active = draft.background === b.id
+            return (
+              <button
+                key={b.id}
+                onClick={() => pickBackground(b.id)}
+                aria-pressed={active}
+                className="rounded-xl overflow-hidden border-2 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+                style={{ borderColor: active ? ramp[500] : 'var(--surface-border)' }}
+              >
+                <div className="h-14 relative" style={{ background: b.canvas }}>
+                  {/* tiny card hint so the user sees real contrast */}
+                  <div className="absolute inset-2 rounded-lg bg-white shadow-sm" style={{ opacity: 0.9 }} />
+                  {active && (
+                    <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full flex items-center justify-center" style={{ background: ramp[600] }}>
+                      <Check size={12} className="text-white" strokeWidth={3} aria-hidden="true" />
+                    </span>
+                  )}
+                </div>
+                <div className="py-1.5 text-[10px] font-semibold text-center bg-white" style={{ color: active ? 'var(--ink-primary)' : 'var(--ink-tertiary)' }}>
+                  {b.name}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </Section>
+
+      {/* Sidebar */}
+      <Section title="Sidebar Theme" desc="The desktop navigation rail. On phones the bottom bar always stays light.">
+        <div className="grid grid-cols-2 gap-2.5">
+          {SIDEBAR_PRESETS.map(s => {
+            const active = draft.sidebar === s.id
+            const swatch = s.id === 'accent' ? ramp[800] : '#111827'
+            return (
+              <button
+                key={s.id}
+                onClick={() => pickSidebar(s.id)}
+                aria-pressed={active}
+                className="flex items-center gap-3 p-3 rounded-xl border-2 text-left transition focus:outline-none focus-visible:ring-2"
+                style={{ borderColor: active ? ramp[500] : 'var(--surface-border)' }}
+              >
+                <span className="w-10 h-10 rounded-lg shrink-0 flex flex-col justify-center gap-1 px-1.5" style={{ background: swatch }}>
+                  <span className="h-1 rounded-full" style={{ background: ramp[500], width: '70%' }} />
+                  <span className="h-1 rounded-full bg-white/30" style={{ width: '90%' }} />
+                  <span className="h-1 rounded-full bg-white/30" style={{ width: '55%' }} />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{s.name}</p>
+                  <p className="text-[10px] text-gray-400">{s.desc}</p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </Section>
+
+      <div className="flex gap-2">
+        <button onClick={reset} className="btn-secondary shrink-0"><RotateCcw size={14} />Reset</button>
+        <button onClick={save} className="btn-primary flex-1"><Save size={14} />Save Appearance</button>
+      </div>
+    </>
   )
 }
 
