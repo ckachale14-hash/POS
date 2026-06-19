@@ -875,33 +875,67 @@ function WholesaleModal({ products, onClose }) {
     })()
   }, [])
 
-  const boxItems = products.filter(p => p.active && p.boxSize > 1 && p.boxPrice > 0)
-  const wsItems  = products.filter(p => p.active && p.wholesalePrice > 0)
+  // Box-first pricing: when a real box exists (size > 1 with a price) we quote the
+  // box only — never the per-unit rate for that product. Items with no box fall
+  // back to per-unit wholesale. Inventory order is preserved throughout, so both
+  // the category sequence and the items inside each follow the database order.
+  const priced = useMemo(() => products
+    .filter(p => p.active)
+    .map(p => {
+      const hasBox = p.boxSize > 1 && p.boxPrice > 0
+      if (hasBox) return { name: p.name, category: p.category, box: p.boxSize, price: parseFloat(p.boxPrice) }
+      if (p.wholesalePrice > 0) return { name: p.name, category: p.category, box: null, price: parseFloat(p.wholesalePrice) }
+      return null
+    })
+    .filter(Boolean), [products])
+
+  // Categories in first-seen (inventory) order.
+  const orderedCategories = useMemo(() => {
+    const seen = []
+    priced.forEach(p => { if (!seen.includes(p.category)) seen.push(p.category) })
+    return seen
+  }, [priced])
+
+  // Which categories to include. null = uninitialised; defaults to everything.
+  const [selected, setSelected] = useState(null)
+  useEffect(() => {
+    if (selected === null && orderedCategories.length) setSelected(new Set(orderedCategories))
+  }, [orderedCategories, selected])
+  const sel = selected || new Set()
+
+  const toggleCat = (cat) => setSelected(prev => {
+    const next = new Set(prev || [])
+    if (next.has(cat)) next.delete(cat); else next.add(cat)
+    return next
+  })
+  const selectAll = () => setSelected(new Set(orderedCategories))
+  const clearAll  = () => setSelected(new Set())
+
+  // Selected categories → their priced items, dropping any empty group.
+  const groups = useMemo(() => orderedCategories
+    .filter(cat => sel.has(cat))
+    .map(cat => ({ cat, items: priced.filter(p => p.category === cat) }))
+    .filter(g => g.items.length > 0), [orderedCategories, sel, priced])
+
+  const itemCount = groups.reduce((n, g) => n + g.items.length, 0)
 
   const buildText = () => {
     const lines = []
-    lines.push(`*${shopInfo.name || 'PortionSpot'} — Wholesale Price List*`)
+    lines.push(`*${shopInfo.name || 'PORTIONSPOT MOTORS'} — Wholesale Price List*`)
     const phoneList = Array.isArray(shopInfo.phones)
       ? shopInfo.phones.filter(Boolean).join(' / ')
       : ''
     if (phoneList) lines.push(phoneList)
     lines.push(`_Updated: ${new Date().toLocaleDateString('en-GB')}_`)
-    lines.push('')
 
-    if (boxItems.length > 0) {
-      lines.push('*Box / Set Prices:*')
-      boxItems.forEach(p => {
-        lines.push(`  ${p.name} (x${p.boxSize}) — $${parseFloat(p.boxPrice).toFixed(2)}`)
-      })
+    groups.forEach(g => {
       lines.push('')
-    }
-
-    if (wsItems.length > 0) {
-      lines.push('*Wholesale (per unit):*')
-      wsItems.forEach(p => {
-        lines.push(`  ${p.name} — $${parseFloat(p.wholesalePrice).toFixed(2)}`)
+      lines.push(`*${g.cat.toUpperCase()}*`)
+      g.items.forEach(p => {
+        const unit = p.box ? ` (x${p.box})` : ''
+        lines.push(`  ${p.name}${unit} — $${p.price.toFixed(2)}`)
       })
-    }
+    })
 
     return lines.join('\n').trim()
   }
@@ -912,19 +946,24 @@ function WholesaleModal({ products, onClose }) {
   }
 
   const handlePdf = () => {
-    const rows = [
-      ...boxItems.map(p => `<tr><td>${p.name}</td><td>x${p.boxSize} box</td><td style="text-align:right">$${parseFloat(p.boxPrice).toFixed(2)}</td></tr>`),
-      ...wsItems.map(p => `<tr><td>${p.name}</td><td>per unit</td><td style="text-align:right">$${parseFloat(p.wholesalePrice).toFixed(2)}</td></tr>`),
-    ].join('')
+    const body = groups.map(g => {
+      const head = `<tr><td colspan="2" class="cat">${g.cat}</td></tr>`
+      const items = g.items.map(p => {
+        const unit = p.box ? ` <span class="u">(x${p.box})</span>` : ''
+        return `<tr><td>${p.name}${unit}</td><td style="text-align:right">$${p.price.toFixed(2)}</td></tr>`
+      }).join('')
+      return head + items
+    }).join('')
     const doc = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Wholesale Price List</title>
 <style>body{font-family:sans-serif;padding:20px;max-width:600px}h2{margin-bottom:4px}p{color:#666;font-size:13px;margin-bottom:16px}
 table{width:100%;border-collapse:collapse}th{text-align:left;border-bottom:2px solid #000;padding:6px}
-td{padding:5px 6px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f9f9f9}
+td{padding:5px 6px;border-bottom:1px solid #eee}.u{color:#888;font-size:12px}
+td.cat{font-weight:700;text-transform:uppercase;font-size:12px;letter-spacing:.04em;background:#f1f1f1;border-bottom:1px solid #ccc;padding-top:10px}
 @media print{@page{margin:10mm}}</style></head><body>
-<h2>${shopInfo.name || 'PortionSpot'} — Wholesale Price List</h2>
+<h2>${shopInfo.name || 'PORTIONSPOT MOTORS'} — Wholesale Price List</h2>
 <p>${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-<table><thead><tr><th>Product</th><th>Unit</th><th style="text-align:right">Price</th></tr></thead>
-<tbody>${rows}</tbody></table>
+<table><thead><tr><th>Product</th><th style="text-align:right">Price</th></tr></thead>
+<tbody>${body}</tbody></table>
 <script>window.onload=function(){window.print()}<\/script></body></html>`
     const url = URL.createObjectURL(new Blob([doc], { type: 'text/html' }))
     window.open(url, '_blank')
@@ -932,6 +971,7 @@ td{padding:5px 6px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f
   }
 
   const text = buildText()
+  const allOn = orderedCategories.length > 0 && sel.size === orderedCategories.length
 
   return (
     <div className="modal-overlay animate-fade-in" onClick={onClose}>
@@ -939,22 +979,50 @@ td{padding:5px 6px;border-bottom:1px solid #eee}tr:nth-child(even){background:#f
         <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 shrink-0">
           <div>
             <p className="font-bold text-gray-900 text-sm">Wholesale Price List</p>
-            <p className="text-xs text-gray-400">{boxItems.length + wsItems.length} item(s)</p>
+            <p className="text-xs text-gray-400">{itemCount} item(s) · {sel.size}/{orderedCategories.length} categories</p>
           </div>
-          <button onClick={onClose}><X size={17} className="text-gray-400" /></button>
+          <button onClick={onClose} aria-label="Close"><X size={17} className="text-gray-400" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Categories</p>
+              <div className="flex gap-1.5">
+                <button onClick={selectAll} className="text-xs font-medium text-brand-600 hover:text-brand-700 px-1.5 py-0.5">All</button>
+                <button onClick={clearAll} className="text-xs font-medium text-gray-400 hover:text-gray-600 px-1.5 py-0.5">Clear</button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {orderedCategories.map(cat => {
+                const on = sel.has(cat)
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => toggleCat(cat)}
+                    aria-pressed={on}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-medium transition active:scale-95 ${on ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                  >
+                    {on && <Check size={11} aria-hidden="true" />}
+                    {cat}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 rounded-xl p-3 leading-relaxed">
-            {text || 'No items with box or wholesale pricing found.\nAdd box prices or wholesale prices in Inventory.'}
+            {text || (allOn
+              ? 'No items with box or wholesale pricing found.\nAdd box prices or wholesale prices in Inventory.'
+              : 'No categories selected. Tap a category above to include it.')}
           </pre>
         </div>
 
         <div className="px-4 py-3 border-t border-gray-100 flex gap-2 shrink-0">
-          <button onClick={handlePdf} className="btn-secondary flex-1 gap-2">
+          <button onClick={handlePdf} disabled={itemCount === 0} className="btn-secondary flex-1 gap-2 disabled:opacity-40 disabled:pointer-events-none">
             <Download size={14} />PDF
           </button>
-          <button onClick={handleWhatsApp} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition active:scale-95">
+          <button onClick={handleWhatsApp} disabled={itemCount === 0} className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none">
             <Send size={14} />WhatsApp
           </button>
         </div>
