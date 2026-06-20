@@ -114,13 +114,16 @@ function Field({ label, hint, children }) {
   )
 }
 
-function Toggle({ value, onChange, label }) {
+function Toggle({ value, onChange, label, hint }) {
   return (
     <div className="flex items-center gap-3 py-1">
       <button onClick={() => onChange(!value)} className={`toggle ${value ? 'toggle-on' : 'toggle-off'}`}>
         <span className={`toggle-thumb ${value ? 'toggle-thumb-on' : 'toggle-thumb-off'}`} />
       </button>
-      <span className="text-sm text-gray-700">{label}</span>
+      <span className="text-sm text-gray-700">
+        {label}
+        {hint && <span className="block text-[10px] text-gray-400">{hint}</span>}
+      </span>
     </div>
   )
 }
@@ -727,31 +730,62 @@ function TaxTab({ showToast }) {
   const [vatEnabled, setVatEnabled] = useState(false)
   const [vatRate, setVatRate]       = useState('15')
   const [discThreshold, setDiscThreshold] = useState('5')
+  const [wsRoundMode, setWsRoundMode] = useState('none')
+  const [checkoutRounding, setCheckoutRounding] = useState(false)
+
+  const ROUND_OPTIONS = [
+    { id: 'none', label: 'No rounding' },
+    { id: 'up10', label: 'Up to 10c' },
+    { id: 'up25', label: 'Up to 25c' },
+    { id: 'up50', label: 'Up to 50c' },
+  ]
 
   useEffect(() => {
     getSetting('vat_enabled', false).then(v => setVatEnabled(!!v))
     getSetting('vat_rate', 0.15).then(v => setVatRate(String(parseFloat(v) * 100)))
     getSetting('discount_threshold', 5).then(v => setDiscThreshold(String(v)))
+    getSetting('ws_round_mode', 'none').then(v => setWsRoundMode(v || 'none'))
+    getSetting('checkout_rounding', false).then(v => setCheckoutRounding(!!v))
   }, [])
 
   const save = async () => {
     await setSetting('vat_enabled', vatEnabled)
     await setSetting('vat_rate', parseFloat(vatRate) / 100)
     await setSetting('discount_threshold', parseFloat(discThreshold) || 5)
-    showToast('Tax settings saved')
+    await setSetting('ws_round_mode', wsRoundMode)
+    await setSetting('checkout_rounding', checkoutRounding)
+    showToast('Tax & pricing settings saved')
   }
 
   return (
-    <Section title="Tax & Discounts">
-      <Toggle value={vatEnabled} onChange={setVatEnabled} label="Enable VAT on sales" />
-      <Field label="VAT Rate (%)" hint="Default is 15%">
-        <input type="number" min="0" max="100" value={vatRate} onChange={e => setVatRate(e.target.value)} className="input text-sm" disabled={!vatEnabled} />
-      </Field>
-      <Field label="Discount PIN threshold ($)" hint="Discounts above this amount require manager PIN">
-        <input type="number" min="0" value={discThreshold} onChange={e => setDiscThreshold(e.target.value)} className="input text-sm" />
-      </Field>
-      <button onClick={save} className="btn-primary w-full mt-2"><Save size={14} />Save</button>
-    </Section>
+    <>
+      <Section title="Tax & Discounts">
+        <Toggle value={vatEnabled} onChange={setVatEnabled} label="Enable VAT on sales" />
+        <Field label="VAT Rate (%)" hint="Default is 15%">
+          <input type="number" min="0" max="100" value={vatRate} onChange={e => setVatRate(e.target.value)} className="input text-sm" disabled={!vatEnabled} />
+        </Field>
+        <Field label="Discount PIN threshold ($)" hint="Discounts above this amount require manager PIN">
+          <input type="number" min="0" value={discThreshold} onChange={e => setDiscThreshold(e.target.value)} className="input text-sm" />
+        </Field>
+      </Section>
+
+      <Section title="Pricing & Rounding">
+        <Field label="Wholesale unit rounding" hint="When a per-unit price is derived from a box price, round it UP to this step so giving change is easy (seller's favour).">
+          <div className="grid grid-cols-2 gap-2">
+            {ROUND_OPTIONS.map(o => (
+              <button key={o.id} onClick={() => setWsRoundMode(o.id)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition ${wsRoundMode === o.id ? 'border-brand-400 bg-brand-50 text-brand-700' : 'border-gray-100 text-gray-600'}`}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Toggle value={checkoutRounding} onChange={setCheckoutRounding}
+          label="Choose rounding in checkout popup"
+          hint="Adds a rounding selector to the price popup so you can adjust per sale." />
+        <button onClick={save} className="btn-primary w-full mt-2"><Save size={14} />Save</button>
+      </Section>
+    </>
   )
 }
 

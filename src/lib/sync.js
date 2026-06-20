@@ -55,6 +55,7 @@ async function pushProducts(sb, log) {
   const rows = products.map(p => ({
     sku: p.sku, name: p.name, category: p.category,
     product_type: p.productType || 'box',
+    box_only: !!p.boxOnly,
     box_price: p.boxPrice || 0, box_size: p.boxSize || 1,
     wholesale_price: p.wholesalePrice || 0, retail_price: p.retailPrice || 0,
     cost_price: p.costPrice || 0, stock_boxes: p.stockBoxes || 0,
@@ -141,6 +142,7 @@ async function pullProducts(sb, log) {
     const mapped = {
       sku: row.sku, name: row.name, category: row.category,
       productType: row.product_type || 'box',
+      boxOnly: row.box_only ? 1 : 0,
       boxPrice: row.box_price, boxSize: row.box_size,
       wholesalePrice: row.wholesale_price, retailPrice: row.retail_price,
       costPrice: row.cost_price, stockBoxes: row.stock_boxes,
@@ -263,6 +265,7 @@ export async function forcePullAll(log) {
       const mapped = {
         sku: row.sku, name: row.name, category: row.category,
         productType: row.product_type || 'box',
+        boxOnly: row.box_only ? 1 : 0,
         boxPrice: row.box_price, boxSize: row.box_size,
         wholesalePrice: row.wholesale_price, retailPrice: row.retail_price,
         costPrice: row.cost_price, stockBoxes: row.stock_boxes,
@@ -358,6 +361,7 @@ export async function initialPull(url, key, log) {
       await db.products.add({
         sku: row.sku, name: row.name, category: row.category,
         productType: row.product_type || 'box',
+        boxOnly: row.box_only ? 1 : 0,
         boxPrice: row.box_price, boxSize: row.box_size,
         wholesalePrice: row.wholesale_price, retailPrice: row.retail_price,
         costPrice: row.cost_price, stockBoxes: row.stock_boxes,

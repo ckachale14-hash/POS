@@ -4,17 +4,21 @@ import {
   X, ChevronDown, Filter, Box, Layers, RefreshCw, Check, Tag, ScanLine, History, Send, List,
 } from 'lucide-react'
 import { db, logAudit, getTotalUnits, autoConvert, getSetting, saveSetting, setSetting } from '../lib/db'
-import { fmt } from '../lib/utils'
+import { fmt, round2, roundUpStep } from '../lib/utils'
 import { CATEGORIES, SHOP_INFO } from '../data/initial-inventory'
 import { useBarcodeScanner } from '../lib/useBarcode'
 
 const EMPTY_PRODUCT = {
   sku: '', name: '', category: CATEGORIES[0],
   productType: 'box',
+  boxOnly: 0,
   boxPrice: '', boxSize: 1,
   wholesalePrice: '', retailPrice: '', costPrice: '',
   stockBoxes: 0, stockUnits: 0, active: 1,
 }
+
+// True when a field holds no usable price (empty or zero).
+const blankPrice = (v) => v === '' || v == null || parseFloat(v) === 0
 
 function StockDisplay({ product }) {
   const boxes = product.stockBoxes || 0
@@ -66,6 +70,7 @@ export default function Inventory({ user }) {
   const [importModal, setImportModal]   = useState(false)
   const [importText, setImportText]     = useState('')
   const [autoConvertEnabled, setAutoConvertEnabled] = useState(true)
+  const [roundMode, setRoundMode] = useState('none')
 
   const [customCategories, setCustomCategories] = useState([])
   const [catModal, setCatModal]               = useState(false)
@@ -133,9 +138,43 @@ export default function Inventory({ user }) {
     load()
     loadCategories()
     getSetting('auto_convert_stock', true).then(v => setAutoConvertEnabled(!!v))
+    getSetting('ws_round_mode', 'none').then(v => setRoundMode(v || 'none'))
   }, [])
 
   const allCategories = useMemo(() => [...CATEGORIES, ...customCategories], [customCategories])
+
+  // Auto-fill the blank price from its counterpart, using units-per-box.
+  // Only ever fills an empty field — a price you typed is never overwritten,
+  // so deliberate box discounts survive. Box→unit divides (and rounds up per the
+  // shop's rule); unit→box multiplies (exact).
+  const editBoxPrice = (v) => setEditModal(m => {
+    const next = { ...m, boxPrice: v }
+    const size = parseInt(next.boxSize) || 1
+    if (size > 1 && parseFloat(v) > 0 && blankPrice(next.wholesalePrice)) {
+      next.wholesalePrice = String(roundUpStep(parseFloat(v) / size, roundMode))
+    }
+    return next
+  })
+  const editWholesale = (v) => setEditModal(m => {
+    const next = { ...m, wholesalePrice: v }
+    const size = parseInt(next.boxSize) || 1
+    if (size > 1 && parseFloat(v) > 0 && blankPrice(next.boxPrice)) {
+      next.boxPrice = String(round2(parseFloat(v) * size))
+    }
+    return next
+  })
+  const editBoxSize = (v) => setEditModal(m => {
+    const next = { ...m, boxSize: v }
+    const size = parseInt(v) || 1
+    if (size > 1) {
+      if (!blankPrice(next.boxPrice) && blankPrice(next.wholesalePrice)) {
+        next.wholesalePrice = String(roundUpStep(parseFloat(next.boxPrice) / size, roundMode))
+      } else if (!blankPrice(next.wholesalePrice) && blankPrice(next.boxPrice)) {
+        next.boxPrice = String(round2(parseFloat(next.wholesalePrice) * size))
+      }
+    }
+    return next
+  })
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -172,6 +211,7 @@ export default function Inventory({ user }) {
       productType:    rest.productType || 'box',
       boxPrice:       isBoxType ? (parseFloat(rest.boxPrice) || 0) : 0,
       boxSize:        isBoxType ? (parseInt(rest.boxSize) || 1) : 1,
+      boxOnly:        isBoxType && rest.boxOnly ? 1 : 0,
       wholesalePrice: parseFloat(rest.wholesalePrice) || 0,
       retailPrice:    parseFloat(rest.retailPrice) || 0,
       costPrice:      parseFloat(rest.costPrice) || 0,
@@ -524,7 +564,7 @@ export default function Inventory({ user }) {
                     {(editModal.productType === 'set') && <span className="ml-1 text-gray-400 font-normal">per set</span>}
                     {(editModal.productType === 'piece') && <span className="ml-1 text-gray-400 font-normal">each</span>}
                   </label>
-                  <input type="number" inputMode="decimal" value={editModal.wholesalePrice} onChange={e => setEditModal(m => ({ ...m, wholesalePrice: e.target.value }))} className="input text-sm" />
+                  <input type="number" inputMode="decimal" value={editModal.wholesalePrice} onChange={e => editWholesale(e.target.value)} className="input text-sm" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -538,16 +578,31 @@ export default function Inventory({ user }) {
 
               {/* Box-only fields */}
               {(editModal.productType || 'box') === 'box' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Box Price ($)</label>
-                    <input type="number" inputMode="decimal" value={editModal.boxPrice} onChange={e => setEditModal(m => ({ ...m, boxPrice: e.target.value }))} className="input text-sm" />
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Box Price ($)</label>
+                      <input type="number" inputMode="decimal" value={editModal.boxPrice} onChange={e => editBoxPrice(e.target.value)} className="input text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Units per Box</label>
+                      <input type="number" min="1" value={editModal.boxSize} onChange={e => editBoxSize(e.target.value)} className="input text-sm" />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Units per Box</label>
-                    <input type="number" min="1" value={editModal.boxSize} onChange={e => setEditModal(m => ({ ...m, boxSize: e.target.value }))} className="input text-sm" />
-                  </div>
-                </div>
+
+                  <label className="flex items-center gap-2 p-2.5 bg-amber-50 rounded-xl border border-amber-100 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!editModal.boxOnly}
+                      onChange={e => setEditModal(m => ({ ...m, boxOnly: e.target.checked ? 1 : 0 }))}
+                      className="w-4 h-4 accent-amber-600"
+                    />
+                    <span className="text-xs">
+                      <span className="font-semibold text-amber-800">Sell as whole box/container only</span>
+                      <span className="block text-[10px] text-amber-600">Locks loose-unit sales — e.g. a sealed pack of clips</span>
+                    </span>
+                  </label>
+                </>
               )}
 
               <div>

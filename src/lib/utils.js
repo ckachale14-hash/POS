@@ -3,6 +3,16 @@ export const pct = (n) => `${(Number(n) || 0).toFixed(1)}%`
 export const fmt = (n) => `$${(Number(n) || 0).toFixed(2)}`
 export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 
+// Round a price UP to the nearest step so change is easy to give (seller's favour).
+// mode: 'none' | 'up10' | 'up25' | 'up50'. 'none' just snaps to whole cents.
+export const ROUND_STEPS = { none: 0, up10: 0.10, up25: 0.25, up50: 0.50 }
+export function roundUpStep(value, mode = 'none') {
+  const v = Number(value) || 0
+  const step = ROUND_STEPS[mode] || 0
+  if (step <= 0) return round2(v)
+  return round2(Math.ceil((v - 1e-9) / step) * step)
+}
+
 export function genId(prefix = 'PSM') {
   const d = new Date();
   const datePart = `${d.getFullYear().toString().slice(-2)}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;

@@ -61,6 +61,8 @@ const DEFAULT_SETTINGS = {
   theme_accent_hex:              '#ff3830',
   theme_background:              'cloud',
   theme_sidebar:                 'dark',
+  ws_round_mode:                 'none',
+  checkout_rounding:             false,
 }
 
 // ── Lock screen ───────────────────────────────────────────────────────────

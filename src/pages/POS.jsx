@@ -11,7 +11,7 @@ import {
   db, saveSale, saveQuote, holdSale, removeHeldSale,
   getSetting, saveSetting, logAudit, genRef, deductStock, getTotalUnits
 } from '../lib/db'
-import { fmt, round2, genId, calculateTotals } from '../lib/utils'
+import { fmt, round2, genId, calculateTotals, roundUpStep, ROUND_STEPS } from '../lib/utils'
 import { CATEGORIES, SHOP_INFO } from '../data/initial-inventory'
 import { useSession } from '../context/SessionContext'
 import Receipt from '../components/Receipt.jsx'
@@ -196,6 +196,9 @@ export default function POS({ user, online, navigate }) {
   const [view, setView]                       = useState('products')
 
   const [priceModal, setPriceModal]           = useState(null)
+  const [wsRoundMode, setWsRoundMode]         = useState('none')
+  const [checkoutRounding, setCheckoutRounding] = useState(false)
+  const [popupRoundMode, setPopupRoundMode]   = useState('none')
   const [lineDiscountModal, setLineDiscountModal] = useState(null)
   const [lineDiscountVal, setLineDiscountVal] = useState('')
   const [showSaleDiscount, setShowSaleDiscount] = useState(false)
@@ -279,8 +282,17 @@ export default function POS({ user, online, navigate }) {
       const se = await getSetting('shop_email')
       const sw = await getSetting('shop_website')
       setShopInfo({ name: sn, tagline: st, address: sa, phones: sp?.split(','), logo: sl, email: se, website: sw })
+      const rm = await getSetting('ws_round_mode')
+      setWsRoundMode(rm || 'none')
+      const cr = await getSetting('checkout_rounding')
+      setCheckoutRounding(!!cr)
     })()
   }, [])
+
+  // Default the in-popup rounding selector to the configured mode each time it opens
+  useEffect(() => {
+    if (priceModal) setPopupRoundMode(wsRoundMode)
+  }, [priceModal, wsRoundMode])
 
   // Register back-button overlay so Android back closes the receipt dialog
   useEffect(() => {
@@ -379,6 +391,14 @@ export default function POS({ user, online, navigate }) {
       return
     }
 
+    // Box-only: locked to whole-box sales — add the box directly, no loose units
+    if (product.boxOnly && product.boxSize > 1 && product.boxPrice > 0) {
+      const result = addToCart(product, 'box')
+      if (!result.ok) { showToast(result.msg, 'error'); return }
+      setAddedSku(product.sku); setTimeout(() => setAddedSku(null), 400)
+      showToast(`${product.name} added`, 'success'); if (navigator.vibrate) navigator.vibrate(30); return
+    }
+
     // Box type: add at retail if no box, otherwise show full price modal
     if (!product.boxSize || product.boxSize <= 1) {
       const result = addToCart(product, 'retail')
@@ -390,7 +410,12 @@ export default function POS({ user, online, navigate }) {
   }
 
   const handleAddWithMode = (product, pMode) => {
-    const result = addToCart(product, pMode)
+    let prod = product
+    // Apply change-friendly rounding to the wholesale unit price when enabled
+    if (pMode === 'wholesale' && checkoutRounding && popupRoundMode !== 'none' && product.wholesalePrice > 0) {
+      prod = { ...product, wholesalePrice: roundUpStep(product.wholesalePrice, popupRoundMode) }
+    }
+    const result = addToCart(prod, pMode)
     if (!result.ok) { showToast(result.msg, 'error'); return }
     setAddedSku(product.sku); setTimeout(() => setAddedSku(null), 400)
     showToast(`${product.name} added`, 'success'); if (navigator.vibrate) navigator.vibrate(30)
@@ -777,26 +802,55 @@ export default function POS({ user, online, navigate }) {
                   <span className="text-xl font-black text-brand-600 tabular-nums">{fmt(priceModal.boxPrice)}</span>
                 </button>
               )}
-              <button onClick={() => handleAddWithMode(priceModal, 'wholesale')}
-                className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-accent-400 hover:bg-accent-50 transition active:scale-95">
-                <div className="text-left">
-                  <p className="font-bold text-sm text-gray-900">Wholesale</p>
-                  <p className="text-xs text-gray-400">
-                    {priceModal.productType === 'set' ? 'Trade price per set' : priceModal.productType === 'piece' ? 'Trade price each' : 'Trade price'}
-                  </p>
+              {/* Change-friendly rounding selector — shown when enabled in Settings */}
+              {checkoutRounding && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-100">
+                  <p className="text-[10px] font-semibold text-amber-700 mb-1.5">Round wholesale unit price (seller's favour)</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {Object.keys(ROUND_STEPS).map(mode => {
+                      const labels = { none: 'None', up10: '10c', up25: '25c', up50: '50c' }
+                      const active = popupRoundMode === mode
+                      const preview = mode === 'none' ? round2(priceModal.wholesalePrice) : roundUpStep(priceModal.wholesalePrice, mode)
+                      return (
+                        <button key={mode} onClick={() => setPopupRoundMode(mode)}
+                          className={`px-1 py-1.5 rounded-lg text-[11px] font-bold transition ${active ? 'bg-amber-500 text-white' : 'bg-white text-amber-700 border border-amber-200'}`}>
+                          <span className="block">{labels[mode]}</span>
+                          <span className="block text-[9px] font-medium opacity-80 tabular-nums">{fmt(preview)}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-                <span className="text-xl font-black text-accent-600 tabular-nums">{fmt(priceModal.wholesalePrice)}</span>
-              </button>
-              <button onClick={() => handleAddWithMode(priceModal, 'retail')}
-                className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-emerald-400 hover:bg-emerald-50 transition active:scale-95">
-                <div className="text-left">
-                  <p className="font-bold text-sm text-gray-900">Retail</p>
-                  <p className="text-xs text-gray-400">
-                    {priceModal.productType === 'set' ? 'Walk-in price per set' : priceModal.productType === 'piece' ? 'Walk-in price each' : 'Walk-in price'}
-                  </p>
-                </div>
-                <span className="text-xl font-black text-emerald-600 tabular-nums">{fmt(priceModal.retailPrice)}</span>
-              </button>
+              )}
+              {/* Wholesale & Retail — hidden for box-only products (whole box sales only) */}
+              {!priceModal.boxOnly && (
+                <button onClick={() => handleAddWithMode(priceModal, 'wholesale')}
+                  className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-accent-400 hover:bg-accent-50 transition active:scale-95">
+                  <div className="text-left">
+                    <p className="font-bold text-sm text-gray-900">Wholesale</p>
+                    <p className="text-xs text-gray-400">
+                      {priceModal.productType === 'set' ? 'Trade price per set' : priceModal.productType === 'piece' ? 'Trade price each' : 'Trade price'}
+                    </p>
+                  </div>
+                  <span className="text-xl font-black text-accent-600 tabular-nums">
+                    {fmt(checkoutRounding && popupRoundMode !== 'none' && priceModal.wholesalePrice > 0
+                      ? roundUpStep(priceModal.wholesalePrice, popupRoundMode)
+                      : priceModal.wholesalePrice)}
+                  </span>
+                </button>
+              )}
+              {!priceModal.boxOnly && (
+                <button onClick={() => handleAddWithMode(priceModal, 'retail')}
+                  className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-100 hover:border-emerald-400 hover:bg-emerald-50 transition active:scale-95">
+                  <div className="text-left">
+                    <p className="font-bold text-sm text-gray-900">Retail</p>
+                    <p className="text-xs text-gray-400">
+                      {priceModal.productType === 'set' ? 'Walk-in price per set' : priceModal.productType === 'piece' ? 'Walk-in price each' : 'Walk-in price'}
+                    </p>
+                  </div>
+                  <span className="text-xl font-black text-emerald-600 tabular-nums">{fmt(priceModal.retailPrice)}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
